@@ -78,18 +78,13 @@ module.exports = class {
 
     const K_ = G1.mulScalar(cred.K, alpha)
     const S_ = G1.mulScalar(cred.S, alpha)
-  
+
     const _S = cred._S.map(el => G1.mulScalar(el, alpha))
 
     const negA_B = F.neg(F.mul(alpha, F.inv(beta)))
 
     const C_ = G1.mulScalar(cred.C, negA_B)
     const T_ = G1.mulScalar(cred.T, negA_B)
-
-    const D = disclosed.reduce((acc, el, i) => {
-      const j = disclosed[i]
-      return G1.add(acc, G1.neg(G1.mulScalar(_S[j], this.k[j])))
-    }, G1.neg(K_))
 
     const S_C = _S.filter((_, i) => !disclosed.includes(i))
     const k_C = this.k.filter((_, i) => !disclosed.includes(i))

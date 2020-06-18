@@ -1,16 +1,16 @@
 const sha512 = require('sha512-wasm')
-const Scalar = require('ffjavascript').Scalar
 const curve = require('./curve')
 
 const F = curve.F
 const G1 = curve.G1
-const G2 = curve.G2
 const rand = curve.randomScalar
 
-var tester
+module.exports = prover
+
 // randomOracle should return a hex string
-module.exports = function (generators, randomOracle) {
+function prover (generators, randomOracle) {
   if (!randomOracle) randomOracle = oracle
+  if (randomOracle instanceof Uint8Array) return prover(generators, () => randomOracle)
 
   function genProof (secrets) {
     const scalars = generators.map(rand)

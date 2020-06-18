@@ -7,12 +7,12 @@ const G1 = curve.G1
 const G2 = curve.G2
 const F = curve.F
 
-module.exports = function (sig, pk, disclosure, sk) {
+module.exports = function (sig, pk, disclosure, challenge) {
   const attrs = sig._S.map(_ => null)
-  for (let [k, v] of disclosure) attrs[v] = k
+  for (const [k, v] of disclosure) attrs[v] = k
 
   const D = disclosure.reduce((acc, el, i) => {
-    let [k, index] = el
+    const [k, index] = el
     return G1.add(acc, G1.mulScalar(sig._S[index], F.neg(k)))
   }, G1.neg(sig.K_))
 
@@ -27,11 +27,11 @@ module.exports = function (sig, pk, disclosure, sk) {
   const sProduct = sig._S.reduce((acc, el, i) => {
     return G1.add(acc, G1.mulScalar(el, _r[i]))
   }, G1.mulScalar(sig.S_, r))
-  
+
   const aProduct = pk._A.reduce((acc, el, i) => {
     return G2.add(acc, G2.mulScalar(el, _r[i]))
   }, G2.mulScalar(pk.A, r))
-  
+
   var pairSQ = curve.pairing(sProduct, pk.Q)
   var pairKA = curve.pairing(sig.K_, aProduct)
 
