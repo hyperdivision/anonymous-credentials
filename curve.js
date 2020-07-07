@@ -10,6 +10,7 @@ const order = G1.r
 const fieldOrder = G1.q
 const F1 = bn128.F1
 const F2 = bn128.F2
+const F12 = bn128.F12
 
 function scalarFrom (arr) {
   if (arr instanceof Uint8Array) {
@@ -56,6 +57,13 @@ function pairing (a, b) {
   return bn128.pairing(a, b)
 }
 
+function verifyPairEq ([a, b], [c, d]) {
+  var ab = pairing(a, b)
+  var cd = pairing(c, d)
+
+  return F12.eq(ab, cd)
+}
+
 module.exports = {
   G1,
   G2,
@@ -73,5 +81,6 @@ module.exports = {
   mulGenG2,
   order,
   fieldOrder,
-  pairing
+  pairing,
+  verifyPairEq
 }
