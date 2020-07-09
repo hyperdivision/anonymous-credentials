@@ -1,6 +1,7 @@
 const assert = require('nanoassert')
 const curve = require('./curve')
 const schnorr = require('./schnorr-proof')
+const attributes = require('./gen-attributes')
 
 const rand = curve.randomScalar
 const G1 = curve.G1
@@ -13,19 +14,21 @@ function IssuingProtocol (keys, attr) {
   const K_ = curve.randomPointG1()
   const S_ = G1.mulScalar(K_, keys.sk.a)
   const S0_ = G1.mulScalar(K_, keys.sk._a[0])
+  const k = attr.map(a => a.toString()).map(attributes.encode)
 
   const setup = {
+    k,
     S_,
     K_,
     S0_
   }
 
-  const response = respond(keys, attr, S_)
+  const response = respond(keys, k, S_)
 
   return {
     setup,
     attr,
-    response
+    response,
   }
 }
 
@@ -43,18 +46,18 @@ function respond (keys, attr, S_) {
     assert(!G1.eq(res.S, S_), 'S and S_ should be distinct.')
     assert(G1.eq(K, S0_inv_a0), 'K and S0_inv_a0 should be equal.')
 
-    const kappa2 = rand()
+    const kappa = rand()
 
     const _S = attr.map((_, i) => G1.mulScalar(K, keys.sk._a[i + 1]))
 
-    const SKappa2 = G1.mulScalar(res.S, kappa2)
+    const SKappa2 = G1.mulScalar(res.S, kappa)
     const C = _S.reduce((acc, el, i) => G1.add(acc, G1.mulScalar(el, attr[i])),
       G1.add(res.R, G1.add(K, SKappa2)))
 
     const T = G1.mulScalar(C, keys.sk.z)
 
     return {
-      kappa2,
+      kappa,
       K,
       _S,
       T

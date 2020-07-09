@@ -1,6 +1,8 @@
 const assert = require('nanoassert')
 const keys = require('./keygen')
 const IssuingProtocol = require('./issuance.js')
+const hash = require('sha256-wasm')
+const hasProperty = Object.prototype.hasOwnProperty
 
 module.exports = class {
   constructor () {
@@ -9,44 +11,52 @@ module.exports = class {
     this.issuances = []
   }
 
-  addIssuance (cert, attributes) {
-    const issuance = cert.issue(attributes)
-    this.issuances.push(issuance)
+  addIssuance (application) {
+    const cert = this.certifications[application.certId]
 
-    return issuance
+    const issuance = cert.issue(application.details)
+    this.issuances.push(issuance)
+    issuance.setup.tag = application.tag
+
+    return issuance.setup
   }
 
   grantCredential (res) {
-    const issuance = this.issuances.find(i => i.tag === res.tag)
+    const issuance = this.issuances.find(i => i.setup.tag === res.tag)
+    const cert = this.certifications[issuance.certId]
 
-    const credential = issuance.response(res)
+    const info = issuance.response(res.details)
 
     // assertion will throw on bad input before we execute following code
     const identity = keys.userIds(this.signingKeys.sk)
 
-    this.certification.credentials.push({
+    cert.credentials.push({
       attr: issuance.attr,
       root: identity.root
     })
 
     return {
-      credential,
-      identity
+      info,
+      identity,
+      tag: res.tag
     }
   }
 
-  newCertification (fields) {
-    const certKeys = keys.issuingKeys(fields.length + 1)
+  registerCertification (schema) {
+    const certKeys = keys.issuingKeys(Object.keys(schema).length + 1)
     const blacklist = []
     const credentials = []
+
+    const certId = shasum(JSON.stringify(schema)).toString('hex')
 
     function getPk () {
       return certKeys.pk
     }
 
-    function issue (attributes) {
-      assert(attributes.length === fields.length)
-      const issuance = new IssuingProtocol(keys, fields)
+    function issue (details) {
+      for (let field of Object.keys(schema)) assert(hasProperty.call(details, field))
+      const issuance = new IssuingProtocol(certKeys, Object.values(details))
+      issuance.certId = certId
 
       return issuance
     }
@@ -55,12 +65,13 @@ module.exports = class {
       getPk,
       issue,
       blacklist,
-      credentials
+      credentials,
+      certId
     }
 
-    this.certifications.push(certification)
+    this.certifications[certId] = certification
 
-    return certification
+    return certId
   }
 
   revokeCredential (revokeId, pk) {
@@ -71,4 +82,8 @@ module.exports = class {
 
     return identity
   }
+}
+
+function shasum (data) {
+  return hash().update(data).digest()
 }

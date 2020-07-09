@@ -20,13 +20,8 @@ function decode (k) {
   return Buffer.from(k.toString(16), 'hex').toString()
 }
 
-function map (attrs) {
-  return attrs.map(encode)
-}
-
 module.exports = {
   format,
-  map,
   encode,
   decode
 }

@@ -11,12 +11,11 @@ module.exports = function (sig, pk, disclosure) {
   const attrs = sig._S.map(_ => null)
   for (const [k, v] of disclosure) attrs[v] = k
 
-  const kNeg = disclosure.map(F.neg)
+  const kNeg = disclosure.map(([k, _]) => F.neg(k))
   const disclosedS = disclosure.map(([_, i]) => sig._S[i])
+  const S_C = sig._S.filter((_, i) => attrs[i] === null)
 
   const D = disclosedS.reduce(mulAddAcc(G1, kNeg), G1.neg(sig.K_))
-
-  const S_C = sig._S.filter((_, i) => attrs[i] === null)
 
   const prover = schnorr([sig.C_, sig.S_].concat(S_C))
   assert(prover.verify(D, sig.proof), 'commitment to D fails validation')
