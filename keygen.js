@@ -8,7 +8,10 @@ module.exports = {
   issuingKeys,
   signingKeys,
   userIds,
-  findRoot
+  findRoot,
+  genIdentifiers,
+  idToKeys,
+  genIdentifier
 }
 
 function issuingKeys (n) {
@@ -47,24 +50,32 @@ function signingKeys () {
   }
 }
 
-function userIds (signingKey) {
-  const root = genUserRoot()
-  const identifiers = genIdentifiers(root)
-
+function idToKeys (id) {
   const pk = Buffer.alloc(sodium.crypto_sign_PUBLICKEYBYTES)
   const sk = Buffer.alloc(sodium.crypto_sign_SECRETKEYBYTES)
-  const sig = Buffer.alloc(sodium.crypto_sign_BYTES)
 
+  sodium.crypto_sign_seed_keypair(pk, sk, id)
 
-  const sigs = identifiers.map(id => {
-    sodium.crypto_sign_seed_keypair(pk, sk, id)
-    sodium.crypto_sign_detached(sig, pk, signingKey)
-    return sig.slice()
+  return {
+    pk, sk
+  }
+}
+
+function userIds (signingKeys, number) {
+  const root = genUserRoot()
+  const keys = genIdentifiers(root, number).map(idToKeys)
+
+  const sigs = keys.map(keys => {
+    const sig = Buffer.alloc(sodium.crypto_sign_BYTES)
+    sodium.crypto_sign_detached(sig, keys.pk, signingKeys.sk)
+
+    return sig
   })
 
   return {
     root,
-    sigs
+    sigs,
+    certKey: signingKeys.pk
   }
 }
 
@@ -76,7 +87,7 @@ function genUserRoot () {
 }
 
 function genIdentifiers (root, len) {
-  const range = new Array(len)
+  const range = new Array(len).fill(0)
   const bits = Math.ceil(Math.log2(len))
 
   const identifiers = range.map((_, i) => genIdentifier(root, i, bits))
@@ -94,19 +105,16 @@ function genIdentifier (root, index, bits) {
   return buf
 }
 
-function findRoot (revokeKey) {
+function findRoot (revokeKey, len) {
   return (root) => {
-    const id = Buffer.alloc(sodium.crypto_sign_SEEDBYTES)
     const pk = Buffer.alloc(sodium.crypto_sign_PUBLICKEYBYTES)
     const sk = Buffer.alloc(sodium.crypto_sign_SECRETKEYBYTES)
 
-    sodium.crypto_generichash(id, root)
+    const identifiers = genIdentifiers(root, len)
 
-    for (let i = 0; i < 128; i++) {
+    for (const id of identifiers) {
       sodium.crypto_sign_seed_keypair(pk, sk, id)
       if (Buffer.compare(pk, revokeKey)) return true
-
-      sodium.crypto_generichash(id, id)
     }
 
     return false

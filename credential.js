@@ -1,6 +1,5 @@
 const schnorr = require('./schnorr-proof')
 const curve = require('./curve')
-const attributes = require('./gen-attributes')
 
 const G1 = curve.G1
 const F = curve.F
@@ -59,8 +58,8 @@ module.exports = class {
     }
   }
 
-  show (disclosedAttr) {
-    const disclosed = disclosedAttr.map(findIndexIn(this.k))
+  show (attributes) {
+    const disclosed = attributes.map(findIndexIn(this.k))
 
     // randomly generate blinding constants
     const alpha = rand()
@@ -85,18 +84,6 @@ module.exports = class {
     const prover = schnorr([dBlindC, blindS, ...undisclosed.S])
     const proof = prover.genProof([beta, this.kappa, ...undisclosed.k])
 
-    // debug
-    // // // // //
-    // const disclosure = {}
-    // disclosure.S = blindedS_.filter((_, i) => disclosed.includes(i))
-    // disclosure.k = this.k.filter((_, i) => disclosed.includes(i))
-    // // console.log(disclosure.k)
-    // const kNeg = disclosure.k.map(a => F.neg(a))
-    // const D = disclosure.S.reduce((acc, el, i) => G1.add(acc, G1.mulScalar(el, kNeg[i])), G1.neg(blindK))
-
-    // console.log(kNeg)
-    // console.log(prover.verify(D, proof))
-
     return {
       K_: blindK,
       S_: blindS,
@@ -113,5 +100,5 @@ function mulAdd (sum, element, scalar) {
 }
 
 function findIndexIn (arr) {
-  return attr => arr.findIndex(a => curve.F.eq(a, attributes.encode(attr)))
+  return attr => arr.findIndex(a => curve.F.eq(a, attr))
 }

@@ -12,7 +12,7 @@ module.exports = class {
   apply (details, certId) {
     // cert.validate(application)
 
-    const identity = new Identity(details)
+    const identity = new Identity(details, certId)
     const tag = rand().toString('hex')
 
     this.applications.push({
@@ -46,13 +46,18 @@ module.exports = class {
     this.applications.splice(index, 1)
   }
 
+  present (attributes) {
+    const id = this.findId(attributes)
+    return id.present(attributes)
+  }
+
   findId (required) {
-    return this.identities.find(id => hasAttributes(id, required))
+    return this.identities.find(id => hasAttributes(id.attributes, required))
   }
 }
 
 function hasAttributes(id, attrs) {
-  return attrs.reduce((b, a) => b & Object.prototype.hasOwnProperty.call(id, a))
+  return attrs.reduce((b, a) => b && Object.prototype.hasOwnProperty.call(id, a))
 }
 
 function rand () {
