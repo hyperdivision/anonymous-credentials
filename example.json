@@ -1,8 +1,0 @@
-{
-  "age": "number",
-  "nationality": "string",
-  "residence": "string",
-  "drivers licence": "boolean",
-  "employed": "boolean",
-  "gender": "string"
-}
