@@ -1,11 +1,11 @@
-const schnorr = require('./schnorr-proof')
-const curve = require('./curve')
+const schnorr = require('./lib/schnorr-proof')
+const curve = require('./lib/curve')
 
 const G1 = curve.G1
 const F = curve.F
 const rand = curve.randomScalar
 
-module.exports = class {
+module.exports = class Credential {
   constructor (length) {
     this.k = new Array(length + 1)
     this.kappa = null

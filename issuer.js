@@ -1,11 +1,12 @@
 const assert = require('nanoassert')
-const keys = require('./keygen')
+const keys = require('./lib/keygen')
 const Certification = require('./certification')
 
-module.exports = class {
-  constructor () {
+module.exports = class Issuer {
+  constructor (storage) {
     this.certifications = {}
     this.issuances = []
+    this._storage = storage
   }
 
   addIssuance (application) {
@@ -39,15 +40,17 @@ module.exports = class {
     }
   }
 
-  registerCertification (schema) {
-    const certification = new Certification(schema)
-    this.certifications[certification.certId] = certification
-
-    return certification.certId
+  registerCertification (schema, cb) {
+    const certification = new Certification(schema, this._storage, {
+      oninit: () => {
+        this.certifications[certification.certId] = certification
+        cb(certification.certId)
+      }
+    })
   }
 
-  revokeCredential (revokeId, certId) {
+  revokeCredential (revokeId, certId, cb) {
     const cert = this.certifications[certId]
-    cert.revoke(revokeId)
+    cert.revoke(revokeId, cb)
   }
 }

@@ -1,7 +1,7 @@
 const assert = require('nanoassert')
-const curve = require('./curve')
-const schnorr = require('./schnorr-proof')
-const attributes = require('./gen-attributes')
+const curve = require('./lib/curve')
+const schnorr = require('./lib/schnorr-proof')
+const attributes = require('./lib/gen-attributes')
 
 const rand = curve.randomScalar
 const G1 = curve.G1

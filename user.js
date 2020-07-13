@@ -1,9 +1,9 @@
-const schnorr = require('./schnorr-proof')
-const curve = require('./curve')
+const schnorr = require('./lib/schnorr-proof')
+const curve = require('./lib/curve')
 const Identity = require('./identity')
 const crypto = require('crypto')
 
-module.exports = class {
+module.exports = class User {
   constructor () {
     this.applications = []
     this.identities = []

@@ -1,19 +1,15 @@
 const Issuer = require('./issuer')
 const User = require('./user')
-const cert = require('./example.json')
 const Verifier = require('./verifier')
-const verify = require('./verify')
-const attributes = require('./gen-attributes')
 
-const org = new Issuer()
-const user = new User()
-const verifier = new Verifier()
-
-// register the certification
-const certId = org.registerCertification(cert)
-
-// add the cert to the verifiers recognised certifications
-verifier.addCertification(org.certifications[certId].getInfo())
+const schema = {
+  "age": "number",
+  "nationality": "string",
+  "residence": "string",
+  "drivers licence": "boolean",
+  "employed": "boolean",
+  "gender": "string"
+}
 
 const application = {
   "age": 66,
@@ -24,36 +20,51 @@ const application = {
   "gender": "male"
 }
 
-// user applies for an identity
-const app = user.apply(application, certId)
+const org = new Issuer('./storage/org')
+const user = new User()
+const verifier = new Verifier('./storage/verifier')
 
-// issuer starts the issuing protocol
-const setup = org.addIssuance(app)
+// register the certification
+org.registerCertification(schema, function (certId) {
+  // add the cert to the verifiers recognised certifications
+  verifier.addCertification(org.certifications[certId].getInfo(), function() {
+    // user applies for an identity
+    const app = user.apply(application, certId)
 
-// user completes issuing protocol
-const obtain = user.obtain(setup)
+    // issuer starts the issuing protocol
+    const setup = org.addIssuance(app)
 
-// issuer finalises the credential
-const granted = org.grantCredential(obtain)
+    // user completes issuing protocol
+    const obtain = user.obtain(setup)
 
-// user stores the credential
-user.store(granted)
+    // issuer finalises the credential
+    const granted = org.grantCredential(obtain)
 
-// user selects which attributes to show
-const present = user.present(['age', 'drivers licence'])
-const success = verifier.validate(present)
-console.log(success)
+    // user stores the credential
+    user.store(granted)
 
-const keys = {
-  pk: Buffer.alloc(32),
-  sk: Buffer.alloc(64)
-}
+    // user selects which attributes to show
+    const present = user.present(['age', 'drivers licence'])
+    verifier.validate(present, function (err, success) {
+      if (err) throw err
+      console.log('credential has been accepted:', success)
+      console.log('userId:', present.sig.pk, '\n')
 
-const revoke = user.identities[0].pseudonym.loadIdentity(130, keys).pk
+      const keys = {
+        pk: Buffer.alloc(32),
+        sk: Buffer.alloc(64)
+      }
 
-org.revokeCredential(revoke, certId)
-verifier.certifications[certId].blacklist = org.certifications[certId].blacklist
+      const revoke = user.identities[0].pseudonym.loadIdentity(130, keys).pk
 
-const presentRevoked = user.present(['age', 'drivers licence'])
-const failure = verifier.validate(presentRevoked)
-console.log(failure)
+      org.revokeCredential(revoke, certId, function (err, i) {
+        verifier.certifications[certId].blacklist.feed.on('download', () => {
+          const presentRevoked = user.present(['age', 'drivers licence'])
+          const failure = verifier.validate(presentRevoked, function (err, success) {
+            if (err) throw err
+          })
+        })
+      })
+    })
+  })
+})

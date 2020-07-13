@@ -1,31 +1,38 @@
 const assert = require('nanoassert')
 const sodium = require('sodium-native')
-const verify = require('./verify.js')
-const attributes = require('./gen-attributes')
+const Blacklist = require('./blacklist')
+const verify = require('./lib/verify')
+const attributes = require('./lib/gen-attributes')
 
-module.exports = class {
-  constructor () {
+module.exports = class Verifier {
+  constructor (storage) {
     this.certifications = {}
+    this._storage = storage
   }
 
-  validate ({ disclosed, sig, showing, certId }) {
+  validate ({ disclosed, sig, showing, certId }, cb) {
     const cert = this.certifications[certId]
     if (cert === undefined) return new Error('certification not recognised.')
 
-    // check for revvoked credential
-    for (let key of cert.blacklist) {
-      if (Buffer.compare(key, sig.pk) === 0) return new Error('this credential has been revoked')
-    }
+    // check for revoked credential
+    if (cert.blacklist.revoked(sig.pk)) return cb(new Error('credential has been revoked'))
 
     const disclosure = Object.entries(disclosed).map(format)
-
     const toVerify = Buffer.from(serialize(showing), 'hex')
 
-    assert(sodium.crypto_sign_verify_detached(sig.certSig, sig.pk, cert.pk.org))
-    assert(sodium.crypto_sign_verify_detached(sig.signature, toVerify, sig.pk))
-    assert(verify(showing, cert.pk.credential, disclosure))
+    if (!sodium.crypto_sign_verify_detached(sig.certSig, sig.pk, cert.pk.org)) {
+      return cb(new Error('user key not certified'))
+    }
 
-    return true
+    if (!sodium.crypto_sign_verify_detached(sig.signature, toVerify, sig.pk))  {
+      return cb(new Error('user signature failed'))
+    }
+
+    if (!verify(showing, cert.pk.credential, disclosure)) {
+      return cb(new Error('credential cannot be verified'))
+    }
+
+    return cb(null, true)
 
     // move attributes away from here, disclosed should give all info needed
     function format ([k, v]) {
@@ -39,8 +46,15 @@ module.exports = class {
     }
   }
 
-  addCertification (certification) {
-    this.certifications[certification.certId] = certification
+  addCertification (cert, cb) {
+    const self = this
+    cert.blacklist = new Blacklist(this._storage, cert.certId, {
+      key: cert.blacklistKey
+    })
+    cert.blacklist.init(() => {
+      self.certifications[cert.certId] = cert
+      cb()
+    })
   }
 }
 

@@ -1,10 +1,10 @@
 const assert = require('nanoassert')
 const sodium = require('sodium-native')
-const keygen = require('./keygen')
+const keygen = require('./lib/keygen')
 const Credential = require('./credential')
-const attributes = require('./gen-attributes')
+const attributes = require('./lib/gen-attributes')
 
-module.exports = class {
+module.exports = class Identity {
   constructor (attrs, certId) {
     this.credential = new Credential(Object.keys(attrs).length)
     this.pseudonym = null
@@ -27,6 +27,7 @@ module.exports = class {
 
     const showing = this.credential.show(encoded)
     const toSign = serialize(showing)
+
     const sig = this.pseudonym.sign(Buffer.from(toSign, 'hex'))
     this.pseudonym.update()
 
@@ -46,14 +47,15 @@ function Pseudonym ({ root, sigs, certKey }) {
 
   const keys = {
     pk: Buffer.alloc(sodium.crypto_sign_PUBLICKEYBYTES),
-    sk: Buffer.alloc(sodium.crypto_sign_SECRETKEYBYTES)
+    sk: Buffer.alloc(sodium.crypto_sign_SECRETKEYBYTES),
+    certSig: null
   }
 
   validate()
   loadIdentity(0, keys)
 
   function update () {
-    loadIdentity(count++, keys)
+    loadIdentity(++count, keys)
     return this
   }
 
@@ -64,21 +66,21 @@ function Pseudonym ({ root, sigs, certKey }) {
   function loadIdentity (counter, keypair) {
     const seed = keygen.genIdentifier(root, counter, maxDepth)
     sodium.crypto_sign_seed_keypair(keypair.pk, keypair.sk, seed)
+    keys.certSig = sigs[count]
 
     return keypair
   }
 
   function sign (msg) {
-    const pk = keys.pk
-    const certSig = sigs[count]
-
     const sig = Buffer.alloc(sodium.crypto_sign_BYTES)
     sodium.crypto_sign_detached(sig, msg, keys.sk)
 
+    assert(sodium.crypto_sign_verify_detached(sig, msg, keys.pk))
+
     return {
       signature: sig,
-      pk,
-      certSig
+      pk: Buffer.from(keys.pk),
+      certSig: Buffer.from(keys.certSig),
     }
   }
 

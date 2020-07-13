@@ -1,16 +1,18 @@
 const assert = require('nanoassert')
-const keys = require('./keygen')
+const keys = require('./lib/keygen')
 const hash = require('sha256-wasm')
+const Blacklist = require('./blacklist')
 const IssuingProtocol = require('./issuance.js')
 
 const hasProperty = Object.prototype.hasOwnProperty
 
-module.exports = class {
-  constructor (schema) {
+module.exports = class Certification {
+  constructor (schema, storage, opts) {
     this.schema = schema
-    this.blacklist = []
     this.credentials = []
     this.certId = shasum(JSON.stringify(schema)).toString('hex')
+
+    this.blacklist = null
 
     this.keys = {}
     this.keys.signing = keys.signingKeys()
@@ -19,6 +21,13 @@ module.exports = class {
       org: this.keys.signing.pk,
       credential: this.keys.cert.pk
     }
+
+    this.init(storage, opts.oninit)
+  }
+
+  init (storage, cb) {
+    this.blacklist = new Blacklist(storage, this.certId)
+    this.blacklist.create(cb)
   }
 
   validate (application) {
@@ -33,7 +42,7 @@ module.exports = class {
       pk: this.keys.pk,
       schema: this.schema,
       certId: this.certId,
-      blacklist: this.blacklist
+      blacklistKey: this.blacklist.feed.key
     }
   }
 
@@ -50,17 +59,14 @@ module.exports = class {
     return issuance
   }
 
-   revoke (revokeKey) {
+   revoke (revokeKey, cb) {
     const revokeRoot = this.credentials.map(c => c.root).find(keys.findRoot(revokeKey, 256))
-    console.log(revokeRoot)
 
     if (this.credentials.find(cred => cred.root === revokeRoot) === undefined) {
       throw new Error('credential does not belong to this certificate')
     }
 
-    const revokedKeys = keys.genIdentifiers(revokeRoot, 256).map(keys.idToKeys)
-    for (let key of revokedKeys) this.blacklist.push(key.pk)
-    return revokeRoot
+    this.blacklist.add(revokeRoot, cb)
   }
 }
 
