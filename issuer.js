@@ -49,8 +49,12 @@ module.exports = class Issuer {
     })
   }
 
-  revokeCredential (revokeId, certId, cb) {
+  revokeCredential (revokeKey, certId, cb) {
     const cert = this.certifications[certId]
-    cert.revoke(revokeId, cb)
+    cert.revoke(revokeKey, cb)
+  }
+
+  getCertInfo (certId) {
+    return this.certifications[certId].getInfo()
   }
 }
