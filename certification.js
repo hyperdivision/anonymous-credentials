@@ -1,6 +1,6 @@
 const assert = require('nanoassert')
 const keys = require('./lib/keygen')
-const hash = require('sha256-wasm')
+const sodium = require('sodium-native')
 const RevocationList = require('./revocation-list')
 const IssuingProtocol = require('./issuance.js')
 
@@ -10,7 +10,7 @@ module.exports = class Certification {
   constructor (schema, storage, opts) {
     this.schema = schema
     this.credentials = []
-    this.certId = shasum(JSON.stringify(schema)).toString('hex')
+    this.certId = shasum(Buffer.from(JSON.stringify(schema))).toString('hex')
 
     this.revocationList = null
 
@@ -75,5 +75,7 @@ function check (cond, msg) {
 }
 
 function shasum (data) {
-  return hash().update(data).digest()
+  const hash = Buffer.alloc(sodium.crypto_hash_sha256_BYTES)
+  sodium.crypto_hash_sha256(hash, data)
+  return hash
 }
