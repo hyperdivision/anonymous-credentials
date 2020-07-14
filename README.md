@@ -9,7 +9,7 @@ Anonymous credential scheme based on https://eprint.iacr.org/2017/115.pdf
 
 #### const org = new Issuer(storage)
 
-Instatiate a new Issuer instance. `storage` designates the path which shall be used to store blacklist information.
+Instatiate a new Issuer instance. `storage` designates the path which shall be used to store revocation list information.
 
 #### org.addIssuance(application)
 
@@ -21,7 +21,7 @@ This is the Issuer's final step during issuance and takes the output of `user.ob
 
 #### org.revokeCredential(revokeKey, certId, [callback])
 
-Revoke a credential associated with a given `revokeKey`. This method shall publish the root id associated with this key to the certifications blacklist, anyone subscribed to the blacklist may then derive all keys associated with the root id and checks against these keys during verification.
+Revoke a credential associated with a given `revokeKey`. This method shall publish the root id associated with this key to the certifications revocation list, anyone subscribed to the revocation list may then derive all keys associated with the root id and checks against these keys during verification.
 
 #### org.registerCertification(schema, [callback])
 
@@ -29,7 +29,7 @@ Register a new credential. Providing a JSON `schema` specifying field titles and
 
 #### org.getCertInfo(certId)
 
-Get the public keys and blacklist informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. 
+Get the public keys and revocation list informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. 
 
 
 ### User
@@ -54,14 +54,14 @@ Store a completed credential. `msg` contains the finalised credential and the Is
 
 Generate a transcript showing a valid credential, only disclosing the properties specified in `attributes`.
 
-### user.findId(required) 
+### user.findId(required)
 
 
 ### Verifier
 
 #### const verifier = new Verifier(storage)
 
-Instantiate a new Verifier. `storage` should be a path designated where blacklist data shall be stored.
+Instantiate a new Verifier. `storage` should be a path designated where revocation list data shall be stored.
 
 #### verifier.validate(transcript, cb)
 
@@ -69,7 +69,7 @@ Validate a given `transcript` output from `user.present`. Returns `false` if val
 
 #### verifier.addCertification(cert, cb)
 
-Recognise a new certification. `cert` is the output of `org.getCertInfo(certId)`, containing the certification public keys and the information needed to sync the `blacklist` associated with the certification.
+Recognise a new certification. `cert` is the output of `org.getCertInfo(certId)`, containing the certification public keys and the information needed to sync the `revocation list` associated with the certification.
 
 
 ## How it works
@@ -93,4 +93,4 @@ The unlinkability presents an issue in the case of a bad acting user. A service 
 
 ### Revocability
 
-A service can report a `pseudonymPublicKey` to the Issuer to have them revoked. The Issuer may then determine which identity this pseudonym belongs to and publish the `root` to a blacklist associated with the certification. Verifiers interested in this certification subscribe to the blacklist and calculate the `pseudonymPublicKey`s associated with the blacklisted user and can check each new user against this list.
+A service can report a `pseudonymPublicKey` to the Issuer to have them revoked. The Issuer may then determine which identity this pseudonym belongs to and publish the `root` to a revocation list associated with the certification. Verifiers interested in this certification subscribe to the revocation list and calculate the `pseudonymPublicKey`s associated with the revocation listed user and can check each new user against this list.

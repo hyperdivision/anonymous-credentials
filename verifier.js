@@ -1,6 +1,6 @@
 const assert = require('nanoassert')
 const sodium = require('sodium-native')
-const Blacklist = require('./blacklist')
+const RevocationList = require('./revocation-list')
 const verify = require('./lib/verify')
 const attributes = require('./lib/gen-attributes')
 
@@ -15,7 +15,7 @@ module.exports = class Verifier {
     if (cert === undefined) return new Error('certification not recognised.')
 
     // check for revoked credential
-    if (cert.blacklist.revoked(sig.pk)) return cb(new Error('credential has been revoked'))
+    if (cert.revocationList.revoked(sig.pk)) return cb(new Error('credential has been revoked'))
 
     const disclosure = Object.entries(disclosed).map(format)
     const toVerify = Buffer.from(serialize(showing), 'hex')
@@ -48,10 +48,10 @@ module.exports = class Verifier {
 
   addCertification (cert, cb) {
     const self = this
-    cert.blacklist = new Blacklist(this._storage, cert.certId, {
-      key: cert.blacklistKey
+    cert.revocationList = new RevocationList(this._storage, cert.certId, {
+      key: cert.revocationListKey
     })
-    cert.blacklist.init(() => {
+    cert.revocationList.init(() => {
       self.certifications[cert.certId] = cert
       cb()
     })

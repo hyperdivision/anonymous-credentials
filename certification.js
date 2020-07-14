@@ -1,7 +1,7 @@
 const assert = require('nanoassert')
 const keys = require('./lib/keygen')
 const hash = require('sha256-wasm')
-const Blacklist = require('./blacklist')
+const RevocationList = require('./revocation-list')
 const IssuingProtocol = require('./issuance.js')
 
 const hasProperty = Object.prototype.hasOwnProperty
@@ -12,7 +12,7 @@ module.exports = class Certification {
     this.credentials = []
     this.certId = shasum(JSON.stringify(schema)).toString('hex')
 
-    this.blacklist = null
+    this.revocationList = null
 
     this.keys = {}
     this.keys.signing = keys.signingKeys()
@@ -26,8 +26,8 @@ module.exports = class Certification {
   }
 
   init (storage, cb) {
-    this.blacklist = new Blacklist(storage, this.certId)
-    this.blacklist.create(cb)
+    this.revocationList = new RevocationList(storage, this.certId)
+    this.revocationList.create(cb)
   }
 
   validate (application) {
@@ -42,7 +42,7 @@ module.exports = class Certification {
       pk: this.keys.pk,
       schema: this.schema,
       certId: this.certId,
-      blacklistKey: this.blacklist.feed.key
+      revocationListKey: this.revocationList.feed.key
     }
   }
 
@@ -66,7 +66,7 @@ module.exports = class Certification {
       throw new Error('credential does not belong to this certificate')
     }
 
-    this.blacklist.add(revokeRoot, cb)
+    this.revocationList.add(revokeRoot, cb)
   }
 }
 

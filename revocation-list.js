@@ -4,7 +4,7 @@ const pump = require('pump')
 const path = require('path')
 const keys = require('./lib/keygen')
 
-module.exports = class Blacklist {
+module.exports = class RevocationList {
   constructor (storage, certId, opts) {
     this.certId = typeof certId === 'string' ? Buffer.from(certId, 'hex') : certId
     this.storage =  storage
