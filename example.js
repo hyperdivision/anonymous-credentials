@@ -27,7 +27,7 @@ const verifier = new Verifier('./storage/verifier')
 // register the certification
 org.registerCertification(schema, function (certId) {
   // add the cert to the verifiers recognised certifications
-  verifier.addCertification(org.getCertInfo(certId), function () {
+  verifier.addCertification(org.getPublicCert(certId), function () {
     // user applies for an identity
     const app = user.apply(application, certId)
 
@@ -55,10 +55,15 @@ org.registerCertification(schema, function (certId) {
         sk: Buffer.alloc(64)
       }
 
+      console.log(user.identities[0])
       const revoke = user.identities[0].pseudonym.loadIdentity(130, keys).pk
 
       org.revokeCredential(revoke, certId, function (err, i) {
-        verifier.certifications[certId].revocationList.feed.on('download', () => {
+        verifier.certifications[certId].revocationList.feed.on('download', async () => {
+          for await (let key of verifier.certifications[certId].revocationList) {
+            console.log(key)
+            break
+          }
           const presentRevoked = user.present(['age', 'drivers licence'])
           const failure = verifier.validate(presentRevoked, function (err, success) {
             if (err) throw err
