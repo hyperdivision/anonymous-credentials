@@ -1,6 +1,6 @@
 const assert = require('nanoassert')
 const keys = require('./lib/keygen')
-const Certification = require('./certification')
+const { PrivateCertification } = require('./certification')
 
 module.exports = class Issuer {
   constructor (storage) {
@@ -28,7 +28,7 @@ module.exports = class Issuer {
     // assertion will throw on bad input before we execute following code
     const identity = cert.genIdentity()
 
-    cert.credentials.push({
+    cert.addCredential({
       attr: issuance.attr,
       root: identity.root
     })
@@ -41,7 +41,9 @@ module.exports = class Issuer {
   }
 
   registerCertification (schema, cb) {
-    const certification = new Certification(schema, this._storage, {
+    const certification = new PrivateCertification({
+      schema,
+      storage: this._storage,
       oninit: () => {
         this.certifications[certification.certId] = certification
         cb(certification.certId)
@@ -54,7 +56,7 @@ module.exports = class Issuer {
     cert.revoke(revokeKey, cb)
   }
 
-  getCertInfo (certId) {
-    return this.certifications[certId].getInfo()
+  getPublicCert (certId) {
+    return this.certifications[certId].toPublicCertificate()
   }
 }

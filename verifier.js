@@ -3,6 +3,7 @@ const sodium = require('sodium-native')
 const RevocationList = require('./revocation-list')
 const verify = require('./lib/verify')
 const attributes = require('./lib/gen-attributes')
+const { PublicCertification } = require('./certification')
 
 module.exports = class Verifier {
   constructor (storage) {
@@ -15,7 +16,7 @@ module.exports = class Verifier {
     if (cert === undefined) return new Error('certification not recognised.')
 
     // check for revoked credential
-    if (cert.revocationList.revoked(sig.pk)) return cb(new Error('credential has been revoked'))
+    if (cert.revocationList.has(sig.pk)) return cb(new Error('credential has been revoked'))
 
     const disclosure = Object.entries(disclosed).map(format)
     const toVerify = Buffer.from(serialize(showing), 'hex')
@@ -46,7 +47,9 @@ module.exports = class Verifier {
     }
   }
 
-  addCertification (cert, cb) {
+  addCertification (info, cb) {
+    const cert = PublicCertification.parse(info)
+    console.log(cert)
     const self = this
     cert.revocationList = new RevocationList(this._storage, cert.certId, {
       key: cert.revocationListKey
