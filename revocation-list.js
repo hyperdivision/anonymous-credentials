@@ -3,9 +3,12 @@ const hypercore = require('hypercore')
 const pump = require('pump')
 const path = require('path')
 const keys = require('./lib/keygen')
+const EventEmitter = require('events')
 
-module.exports = class RevocationList {
+module.exports = class RevocationList extends EventEmitter {
   constructor (storage, certId, opts) {
+    super()
+
     this.certId = typeof certId === 'string' ? Buffer.from(certId, 'hex') : certId
     this.storage =  storage
 
@@ -13,6 +16,12 @@ module.exports = class RevocationList {
     this.feed = null
     this.swarm = null
     this.revokedKeys = []
+
+    // this.ready = thunky(this._ready.bind(this))
+  }
+
+  _ready (cb) {
+
   }
 
   create (cb) {
@@ -76,11 +85,28 @@ module.exports = class RevocationList {
     })
   }
 
+  serialize (buf, offset) {
+    if (!buf) buf = Buffer.alloc(4 + this.revokedKeys.length * 32)
+    if (!offset) offset = 0
+
+    buf.writeUInt32LE(this.revokedKeys.length, offset)
+    offset += 4
+
+    for (let key of revokedKeys) {
+      buf.set(key, offset)
+      offset += 32
+    }
+
+    this.serialize.bytes = offset - startIndex
+    return buf
+  }
+
   add (key, cb) {
     this.feed.append(key, cb)
   }
 
-  revoked (key) {
+  // TODO: specify time since last sync / live sync then check
+  has (key, opts, cb) {
     for (let revoked of this.revokedKeys) {
       if (Buffer.compare(key, revoked) === 0) return true
     }
