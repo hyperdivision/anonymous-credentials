@@ -111,6 +111,19 @@ class PrivateCertification {
     return buf
   }
 
+  encodingLength () {
+    let len = 4
+
+    for (let cred of this.credentials) len += cred.encodingLength()
+    len += 32
+    len += keys.signingKeysEncodingLength()
+    len += keys.issuingKeysEncodingLength(this.keys.cert)
+    len += 4
+    len += Buffer.from(JSON.stringify(this.schema)).byteLength
+
+    return len
+  }
+
   static parse (buf, offset) {
     if (!offset) offset = 0
     const startIndex = offset
@@ -236,17 +249,25 @@ class Credential {
     if (!offset) offset = 0
     const startIndex = offset
 
-    buf.writeUInt32LE(encodedAttr.bytelength, offset)
+    buf.writeUInt32LE(encodedAttr.byteLength, offset)
     offset += 4
 
     buf.set(encodedAttr, offset)
-    offset += encodedAttr.bytelength
+    offset += encodedAttr.byteLength
 
     buf.set(root)
     offset += 32
 
     this.serialize.bytes = offset - startIndex
     return buf
+  }
+
+  encodingLength () {
+    let len = 4
+    len += Buffer.from(JSON.stringify(this.attr)).byteLength
+    len += 32
+
+    return len
   }
 
   static parse (buf, offset) {
