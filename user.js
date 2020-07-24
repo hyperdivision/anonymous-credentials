@@ -1,4 +1,3 @@
-const schnorr = require('./lib/schnorr-proof')
 const curve = require('./lib/curve')
 const Identity = require('./identity')
 const crypto = require('crypto')

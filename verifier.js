@@ -61,6 +61,39 @@ module.exports = class Verifier {
   }
 }
 
+function decodeShowing (buf, offset) {
+  if (!buf) buf = Buffer.alloc(encodingLength(proof))
+  if (!offset) offset = 0
+  const startIndex = offset
+
+  showing.K_ = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  showing.S_ = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  sLen = buf.readUInt32LE(buf, offset)
+  offset += 4
+
+  showing._S = []
+  for (let i = 0; i < sLen; i++) {
+    showing._S.push(curve.decodeG1(buf, offset))
+    offset += curve.decodeG1.bytes
+  }
+
+  showing.C_ = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  showing.T_ = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  showing.proof = schnorr.parse(buf, offset)
+  offset += schnorr.parse.bytes
+
+  decodeShowing.bytes = offset - startIndex
+  return buf
+}
+
 // write proper encoding library
 function serialize (obj) {
   let result = ''
