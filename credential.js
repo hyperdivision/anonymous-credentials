@@ -5,7 +5,7 @@ const G1 = curve.G1
 const F = curve.F
 const rand = curve.randomScalar
 
-module.exports = class Credential {
+class Credential {
   constructor (length) {
     this.k = new Array(length + 1)
     this.kappa = null
@@ -187,6 +187,58 @@ function findIndexIn (arr) {
   return attr => arr.findIndex(a => curve.F.eq(a, attr))
 }
 
+function serializeObtain (transcript, buf, offset) {
+  if (!buf) buf = Buffer.alloc(obtainEncodingLength(transcript))
+  if (!offset) offset = 0
+  var startIndex = offset
+
+  curve.encodeG1(transcript.S, buf, offset)
+  offset += curve.encodeG1.bytes
+
+  curve.encodeG1(transcript.S0, buf, offset)
+  offset += curve.encodeG1.bytes
+
+  curve.encodeG1(transcript.R, buf, offset)
+  offset += curve.encodeG1.bytes
+
+  schnorr.serialize(transcript.proof, buf, offset)
+  offset += schnorr.serialize.bytes
+
+  serializeObtain.bytes = offset - startIndex
+  return buf
+}
+
+function parseObtain (buf, offset) {
+  if (!buf) buf = Buffer.alloc(obtainEncodingLength(transcript))
+  if (!offset) offset = 0
+  var startIndex = offset
+  
+  const transcript = {}
+  transcript.S = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  transcript.S0 = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  transcript.R = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  transcript.proof = schnorr.parse(buf, offset)
+  offset += schnorr.serialize.bytes
+
+  serializeObtain.bytes = offset - startIndex
+  return transcript
+}
+
+function obtainEncodingLength (transcript) {
+  let len = 0
+
+  len += 96 * 3
+  len += schnorr.encodingLength(transcript.proof)
+
+  return len
+}
+
 function serializeShowing (showing, buf, offset) {
   if (!buf) buf = Buffer.alloc(showingEncodingLength(proof))
   if (!offset) offset = 0
@@ -219,7 +271,7 @@ function serializeShowing (showing, buf, offset) {
   return buf
 }
 
-function decodeShowing (buf, offset) {
+function parseShowing (buf, offset) {
   if (!buf) buf = Buffer.alloc(encodingLength(proof))
   if (!offset) offset = 0
   const startIndex = offset
@@ -259,4 +311,14 @@ function showingEncodingLength (showing) {
   len += schnorr.encodingLength(showing.proof)
 
   return len 
+}
+
+module.exports = {
+  Credential,
+  serializeObtain,
+  parseObtain,
+  obtainEncodingLength,
+  serializeShowing,
+  parseShowing,
+  showingEncodingLength
 }

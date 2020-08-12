@@ -1,7 +1,7 @@
 const assert = require('nanoassert')
 const sodium = require('sodium-native')
 const keygen = require('./lib/keygen')
-const Credential = require('./credential')
+const { Credential } = require('./credential')
 const attributes = require('./lib/gen-attributes')
 
 module.exports = class Identity {

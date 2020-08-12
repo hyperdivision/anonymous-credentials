@@ -45,6 +45,7 @@ org.registerCertification(schema, function (certId) {
 
     // user selects which attributes to show
     const present = user.present(['age', 'drivers licence'])
+
     verifier.validate(present, function (err, success) {
       if (err) throw err
       console.log('credential has been accepted:', success)

@@ -1,4 +1,6 @@
 const assert = require('nanoassert')
+const curve = require('./lib/curve')
+const credential = require('./credential')
 const keys = require('./lib/keygen')
 const { PrivateCertification } = require('./certification')
 
@@ -19,7 +21,9 @@ module.exports = class Issuer {
     return encodeSetup(issuance.setup)
   }
 
-  grantCredential (res) {
+  grantCredential (buf) {
+    const res = decodeObtain(buf)
+
     const issuance = this.issuances.find(i => i.setup.tag === res.tag)
     const cert = this.certifications[issuance.certId]
 
@@ -33,11 +37,13 @@ module.exports = class Issuer {
       root: identity.root
     })
 
-    return {
+    const id = {
       info,
       identity,
       tag: res.tag
     }
+
+    return serializeId(id)
   }
 
   registerCertification (schema, cb) {
@@ -66,7 +72,7 @@ function encodeSetup (setup, buf, offset) {
   if (!offset) offset = 0
   const startIndex = offset
 
-  buf.set(setup.tag, offset)
+  buf.write(setup.tag, offset, 'hex')
   offset += 6
 
   curve.encodeScalars(setup.k, buf, offset)
@@ -82,5 +88,39 @@ function encodeSetup (setup, buf, offset) {
   offset += curve.encodeG1.bytes
 
   encodeSetup.bytes = offset - startIndex
+  return buf
+}
+
+function decodeObtain (buf, offset) {
+  if (!offset) offset = 0
+  const startIndex = offset
+  
+  const obtain = {}
+
+  obtain.tag = buf.subarray(offset, offset + 6).toString('hex')
+  offset += 6
+
+  obtain.details = credential.parseObtain(buf, offset)
+  offset += credential.parseObtain.bytes
+
+  decodeObtain.bytes = offset - startIndex
+  return obtain
+}
+
+function serializeId (id, buf, offset) {
+  if (!buf) buf = Buffer.alloc(6 + id.info.encodingLength() + id.identity.encodingLength())
+  if (!offset) offset = 0
+  const startIndex = offset
+
+  buf.write(id.tag, offset, 'hex')
+  offset += 6
+
+  id.info.encode(buf, offset)
+  offset += id.info.encode.bytes
+
+  id.identity.encode(buf, offset)
+  offset += id.identity.encode.bytes
+
+  serializeId.bytes = offset - startIndex
   return buf
 }

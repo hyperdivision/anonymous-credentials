@@ -56,11 +56,43 @@ function respond (keys, attr, S_) {
 
     const T = G1.mulScalar(C, keys.sk.z)
 
+    function encode (buf, offset) {
+      if (!buf) buf = Buffer.alloc(encodingLength())
+      if (!offset) offset = 0
+      const startIndex = offset
+
+      curve.encodeScalar(kappa, buf, offset)
+      offset += curve.encodeScalar.bytes
+
+      curve.encodeG1(K, buf, offset)
+      offset += curve.encodeG1.bytes
+
+      buf.writeUInt32LE(_S.length, offset)
+      offset += 4
+
+      for (let el of _S) {
+        curve.encodeG1(el, buf, offset)
+        offset += curve.encodeG1.bytes
+      }
+
+      curve.encodeG1(T, buf, offset)
+      offset += curve.encodeG1.bytes
+
+      encode.bytes = offset - startIndex
+      return buf
+    }
+
+    function encodingLength () {
+      return 36 + 96 * (_S.length + 2)
+    }
+
     return {
       kappa,
       K,
       _S,
-      T
+      T,
+      encode,
+      encodingLength
     }
   }
 }
