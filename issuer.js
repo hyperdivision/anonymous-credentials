@@ -16,7 +16,7 @@ module.exports = class Issuer {
     this.issuances.push(issuance)
     issuance.setup.tag = application.tag
 
-    return issuance.setup
+    return encodeSetup(issuance.setup)
   }
 
   grantCredential (res) {
@@ -59,4 +59,28 @@ module.exports = class Issuer {
   getPublicCert (certId) {
     return this.certifications[certId].toPublicCertificate()
   }
+}
+
+function encodeSetup (setup, buf, offset) {
+  if (!buf) buf = Buffer.alloc(96 * 3 + 10 + 32 * setup.k.length)
+  if (!offset) offset = 0
+  const startIndex = offset
+
+  buf.set(setup.tag, offset)
+  offset += 6
+
+  curve.encodeScalars(setup.k, buf, offset)
+  offset += curve.encodeScalars.bytes
+
+  curve.encodeG1(setup.K_, buf, offset)
+  offset += curve.encodeG1.bytes
+
+  curve.encodeG1(setup.S_, buf, offset)
+  offset += curve.encodeG1.bytes
+
+  curve.encodeG1(setup.S0_, buf, offset)
+  offset += curve.encodeG1.bytes
+
+  encodeSetup.bytes = offset - startIndex
+  return buf
 }

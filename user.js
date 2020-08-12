@@ -26,7 +26,9 @@ module.exports = class User {
     }
   }
 
-  obtain (msg) {
+  obtain (buf) {
+    const msg = decodeSetup(buf)
+
     const id = this.applications.find(app => app.tag === msg.tag).identity
     const details = id.credential.obtain(msg)
 
@@ -61,4 +63,30 @@ function hasAttributes(id, attrs) {
 
 function rand () {
   return crypto.randomBytes(6)
+}
+
+function decodeSetup (buf, offset) {
+  if (!buf) buf = encodingLength(setup)
+  if (!offset) offset = 0
+  const startIndex = offset
+
+  const setup = {}
+
+  setup.tag = buf.subarray(offset, offset + 6)
+  offset += 6
+
+  setup.k = curve.decodeScalars(buf, offset)
+  offset += curve.decodeScalars.bytes
+
+  setup.K_ = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  setup.S_ = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  setup.S0_ = curve.decodeG1(buf, offset)
+  offset += curve.decodeG1.bytes
+
+  decodeSetup.bytes = offset - startIndex
+  return buf
 }
