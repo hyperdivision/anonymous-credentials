@@ -34,7 +34,7 @@ function IssuingProtocol (keys, attr) {
 
 function respond (keys, attr, S_) {
   return (res) => {
-    const prover = schnorr([res.S, res.S0])
+    const prover = schnorr.prover([res.S, res.S0])
     assert(prover.verify(res.R, res.proof), 'commitment to R fails validation.')
 
     const inv_a = curve.F.inv(keys.sk.a)
