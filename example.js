@@ -49,23 +49,18 @@ org.registerCertification(schema, function (certId) {
     verifier.validate(present, function (err, success) {
       if (err) throw err
       console.log('credential has been accepted:', success)
-      console.log('userId:', present.sig.pk, '\n')
 
       const keys = {
         pk: Buffer.alloc(32),
         sk: Buffer.alloc(64)
       }
 
-      console.log(user.identities[0])
       const revoke = user.identities[0].pseudonym.loadIdentity(130, keys).pk
 
       org.revokeCredential(revoke, certId, function (err, i) {
         verifier.certifications[certId].revocationList.feed.on('download', async () => {
-          for await (let key of verifier.certifications[certId].revocationList) {
-            console.log(key)
-            break
-          }
           const presentRevoked = user.present(['age', 'drivers licence'])
+
           const failure = verifier.validate(presentRevoked, function (err, success) {
             if (err) throw err
           })

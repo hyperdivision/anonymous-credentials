@@ -240,7 +240,7 @@ function obtainEncodingLength (transcript) {
 }
 
 function serializeShowing (showing, buf, offset) {
-  if (!buf) buf = Buffer.alloc(showingEncodingLength(proof))
+  if (!buf) buf = Buffer.alloc(showingEncodingLength(showing))
   if (!offset) offset = 0
   const startIndex = offset
 
@@ -250,7 +250,7 @@ function serializeShowing (showing, buf, offset) {
   curve.encodeG1(showing.S_, buf, offset)
   offset += curve.encodeG1.bytes
 
-  buf.writeUInt32LE(showing._S.length, buf, offset)
+  buf.writeUInt32LE(showing._S.length, offset)
   offset += 4
 
   for (let k of showing._S) {
@@ -272,17 +272,17 @@ function serializeShowing (showing, buf, offset) {
 }
 
 function parseShowing (buf, offset) {
-  if (!buf) buf = Buffer.alloc(encodingLength(proof))
   if (!offset) offset = 0
   const startIndex = offset
 
+  const showing = {}
   showing.K_ = curve.decodeG1(buf, offset)
   offset += curve.decodeG1.bytes
 
   showing.S_ = curve.decodeG1(buf, offset)
   offset += curve.decodeG1.bytes
 
-  sLen = buf.readUInt32LE(buf, offset)
+  sLen = buf.readUInt32LE(offset)
   offset += 4
 
   showing._S = []
@@ -300,12 +300,12 @@ function parseShowing (buf, offset) {
   showing.proof = schnorr.parse(buf, offset)
   offset += schnorr.parse.bytes
 
-  decodeShowing.bytes = offset - startIndex
-  return buf
+  parseShowing.bytes = offset - startIndex
+  return showing
 }
 
 function showingEncodingLength (showing) {
-  let len = 0
+  let len = 4
 
   len += 96 * (showing._S.length + 4)
   len += schnorr.encodingLength(showing.proof)
