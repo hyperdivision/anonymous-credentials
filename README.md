@@ -2,6 +2,131 @@
 
 Anonymous credential scheme based on https://eprint.iacr.org/2017/115.pdf
 
+## Usage
+
+### Issuer
+```js
+const issuer = new Issuer('./some-storage-path')
+
+const schema = {
+  "age": "number",
+  "nationality": "string",
+  "residence": "string",
+  "drivers licence": "boolean",
+  "employed": "boolean",
+  "gender": "string"
+}
+
+issuer.addCertification(schema, (certId) => {
+  // do something with certId, e.g list online
+
+  // answer a verifier's request for this certification
+  const certInfo = issuer.getCertInfo(certId)
+})
+```
+
+Now the issuer is ready to grant credentials from the certification.
+
+### Verifier
+
+A new verifier must first add the certifications it is willing to accept. They may request the necessary info associated with `certId` from the issuer
+
+```js
+const verifier = new Verifier('./some-other-storage')
+
+verifier.registerCertification(certInfo, () => {
+  // verifier online
+})
+```
+
+### User
+
+The user should have obtained `certId` from a public list. Now they may send an application for a credential:
+
+```js
+const user = new User()
+
+const application = {
+  "age": 66,
+  "nationality": "italy",
+  "residence": "austria",
+  "drivers licence": true,
+  "employed": true,
+  "gender": "male"
+}
+
+ /* --- Client Side --- */
+
+const app = user.apply(application, certId)
+
+(app, { metadata }) --> server // metadata should be proof of ID
+
+ /* --- Server Side --- */
+(app) => {
+  const issuanceInit = issuer.addIssuance(app)
+}
+
+(issuanceInit) --> client
+
+ /* --- Client Side --- */
+
+(issuanceInit) => {
+  const issuanceResponse = user.obtain(issuanceInit)
+}
+
+(issuanceResponse) --> server
+
+ /* --- Server Side --- */
+
+(issuanceResponse) => {
+  const final = issuer.grantCredential(issuanceResponse)
+}
+
+(final) --> client
+
+ /* --- Client Side --- */
+
+(final) => {
+  user.store(final)
+}
+```
+
+Now the user has a credential, which they may present to a verifier:
+
+```js
+ /* --- Client Side --- */
+
+const transcript = user.present(['age', 'nationality'])
+
+(transcript) --> verifier
+
+ /* --- Server Side --- */
+
+verifier.validate(transcript, (err) => {
+  if (err) {
+    // handle reject user
+  }
+
+  // continue service
+})
+```
+
+If a malicious user is detected, the `transcript` associated with their credential may be reported to the issuer and, if appropriate, the issuer may revoke the entire credential:
+
+```js
+/* --- Verifier --- */ 
+
+(transcript, { incidentReport }) --> issuer
+
+/* --- Issuer --- */ 
+
+// check incidentReport, if user is at fault
+(transcript) => {
+  issuer.revokeCredential(transcript.sig.pk, transcript.certId, (err) => {
+    // user has now been revoked
+  })
+}
+```
 
 ## API
 
@@ -19,17 +144,19 @@ Begin a new issuance protocol. This method takes a user's `application`, which i
 
 This is the Issuer's final step during issuance and takes the output of `user.obtain`. In this step the Issuer contributes entropy towards the users credential and seals the credential by exponentiating the product of all curve points in the credential by the Issuer's secret key. This term is used in a bilinear pairing equality to verify the sum of exponents during verification of the credential.
 
-#### org.revokeCredential(revokeKey, certId, [callback])
+#### async org.revokeCredential(transcript, certId, cb())
 
-Revoke a credential associated with a given `revokeKey`. This method shall publish the root id associated with this key to the certifications revocation list, anyone subscribed to the revocation list may then derive all keys associated with the root id and checks against these keys during verification.
+Revoke a credential associated with a given `transcript`. This method shall publish the root id associated with this key to the certifications revocation list, anyone subscribed to the revocation list may then derive all keys associated with the root id and checks against these keys during verification.
 
-#### org.registerCertification(schema, [callback])
+#### async org.addCertification(schema, cb(certId))
 
-Register a new credential. Providing a JSON `schema` specifying field titles and types.
+Register a new certification. Takes a JSON `schema` specifying field titles and types and returns the resulting ertification's `certId`,  a unique identifier string, to the callback provided.
 
-#### org.getCertInfo(certId)
+The certification is stored in `issuer.certifications` under it's `certId` and may be accessed by `issuer.certifications[certId]`.
 
-Get the public keys and revocation list informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. 
+#### const certInfo = org.getCertInfo(certId)
+
+Get the public keys and revocation list informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. `certInfo` is returned as a `buffer` containing the serialized information to be passed to a verifier.
 
 
 ### User
@@ -38,23 +165,31 @@ Get the public keys and revocation list informnation associated with a given `ce
 
 Instantiate a new User.
 
-### user.apply(details, certId)
+### const application = user.apply(details, certId)
 
 Generate an application with the relevant details to send to the Issuer responsible for `certId`. When sending this to the issuer, this should be accompanied by a document proving these properties, e.g. photo ID.
 
-### user.obtain(msg)
+### const issuanceResponse = user.obtain(msg)
 
-The user's part in the issuance protocol, the user generates random scalars to exponentiate the blinded curve points received from `org.addIssuance` and returns them to the issuer.
+The user's contribution in the issuance protocol. This takes the output of `issuer.addIssuance` as a `buffer` and returns an `buffer` containing the serialized response.
+
+In this step the user generates random scalars used to exponentiate the blinded curve points received from `addIssuance` message and returns them to the issuer, thereby contributing her own entropy to the certificate.
 
 ### user.store(msg)
 
-Store a completed credential. `msg` contains the finalised credential and the Issuer's signatures for all pseudonyms associated with this id. This will be stored internally as a new `Identity`, which has associated with it a credential as well as the `root` from which all pseudonyms are derived.
+Store a completed credential. `msg` should be a `buffer` outputted by a call to `issuer.grantCredential`, which contains the serialization of the finalised credential and the issuer's signatures for all pseudonyms associated with this id.
 
-### user.present(attributes)
+This will be stored internally as a new `Identity`, which has associated with it a credential as well as the `root` from which all pseudonyms are derived. This `Identity` can be later accessed using the `findId` method below or accessed directly from `user.identities`.
 
-Generate a transcript showing a valid credential, only disclosing the properties specified in `attributes`.
+### const transcript = user.present(attributes)
 
-### user.findId(required)
+Generate a transcript showing a valid credential, only disclosing the properties specified in `attributes`. `properties` should be passed as an `array` of `strings`, e.g `['age', 'nationality']`; an appropriate identity with the required attributes is then chosen to present.
+
+Returns a `buffer` containing the serialized data required by a verifier to validate the credential. `transcript` should be passed as an argument to `verifier.validate`
+
+### const id = user.findId(required)
+
+Access an identity containing the attributes listed in `required`. Takes an `array` of `strings`, e.g `['age', 'nationality']`, and returns `id` as an instance of an `Identity` object.
 
 
 ### Verifier
@@ -63,13 +198,13 @@ Generate a transcript showing a valid credential, only disclosing the properties
 
 Instantiate a new Verifier. `storage` should be a path designated where revocation list data shall be stored.
 
-#### verifier.validate(transcript, cb)
+#### async verifier.validate(transcript, cb(err))
 
-Validate a given `transcript` output from `user.present`. Returns `false` if validation fails and `true` otherwise
+Validate a given `transcript`, which is the `buffer` returned by `user.present`. `cb` should have the signature `cb(err)` . An error message shall be passed to `cb` if validation fails, otherwise `cb` is executed with no arguments.
 
-#### verifier.addCertification(cert, cb)
+#### async verifier.registerCertification(cert, cb())
 
-Recognise a new certification. `cert` is the output of `org.getCertInfo(certId)`, containing the certification public keys and the information needed to sync the `revocation list` associated with the certification.
+Recognise a new certification. `cert` is a `buffer` as outputted of `org.getCertInfo(certId)`, containing the serialization of the certification public keys and the information needed to sync the `revocation list` associated with the certification.
 
 
 ## How it works
