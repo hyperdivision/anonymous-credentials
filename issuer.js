@@ -46,7 +46,7 @@ module.exports = class Issuer {
     return serializeId(id)
   }
 
-  registerCertification (schema, cb) {
+  addCertification (schema, cb) {
     const certification = new PrivateCertification({
       schema,
       storage: this._storage,
@@ -57,9 +57,9 @@ module.exports = class Issuer {
     })
   }
 
-  revokeCredential (revokeKey, certId, cb) {
+  revokeCredential (toBeRevoked, certId, cb) {
     const cert = this.certifications[certId]
-    cert.revoke(revokeKey, cb)
+    cert.revoke(toBeRevoked, cb)
   }
 
   getPublicCert (certId) {

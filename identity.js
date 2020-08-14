@@ -38,11 +38,7 @@ module.exports = class Identity {
       certId: this.certId
     }
 
-    return {
-      buf: encodePresent(presentation),
-      disclosed,
-      presentation
-    }
+    return encodePresent(presentation)
   }
 }
 

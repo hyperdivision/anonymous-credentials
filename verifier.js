@@ -13,7 +13,7 @@ module.exports = class Verifier {
   }
 
   validate (buf, cb) {
-    const { disclosed, sig, showing, certId } = parsePresent(buf.buf)
+    const { disclosed, sig, showing, certId } = parsePresent(buf)
 
     const cert = this.certifications[certId]
     if (cert === undefined) return new Error('certification not recognised.')
@@ -36,7 +36,7 @@ module.exports = class Verifier {
       return cb(new Error('credential cannot be verified'))
     }
 
-    return cb(null, true)
+    return cb()
 
     // move attributes away from here, disclosed should give all info needed
     function format ([attribute, value]) {
@@ -50,7 +50,7 @@ module.exports = class Verifier {
     }
   }
 
-  addCertification (info, cb) {
+  registerCertification (info, cb) {
     const cert = PublicCertification.parse(info)
     const self = this
     cert.revocationList = new RevocationList(this._storage, cert.certId, {

@@ -25,9 +25,9 @@ const user = new User()
 const verifier = new Verifier('./storage/verifier')
 
 // register the certification
-org.registerCertification(schema, function (certId) {
+org.addCertification(schema, function (certId) {
   // add the cert to the verifiers recognised certifications
-  verifier.addCertification(org.getPublicCert(certId), function () {
+  verifier.registerCertification(org.getPublicCert(certId), function () {
     // user applies for an identity
     const app = user.apply(application, certId)
 
@@ -46,9 +46,9 @@ org.registerCertification(schema, function (certId) {
     // user selects which attributes to show
     const present = user.present(['age', 'drivers licence'])
 
-    verifier.validate(present, function (err, success) {
+    verifier.validate(present, function (err) {
       if (err) throw err
-      console.log('credential has been accepted:', success)
+      console.log('credential has been accepted.')
 
       const keys = {
         pk: Buffer.alloc(32),
@@ -61,7 +61,7 @@ org.registerCertification(schema, function (certId) {
         verifier.certifications[certId].revocationList.feed.on('download', async () => {
           const presentRevoked = user.present(['age', 'drivers licence'])
 
-          const failure = verifier.validate(presentRevoked, function (err, success) {
+          const failure = verifier.validate(presentRevoked, function (err) {
             if (err) throw err
           })
         })
