@@ -154,7 +154,7 @@ Register a new certification. Takes a JSON `schema` specifying field titles and 
 
 The certification is stored in `issuer.certifications` under it's `certId` and may be accessed by `issuer.certifications[certId]`.
 
-#### const certInfo = org.getCertInfo(certId)
+#### const certInfo = org.getPublicCert(certId)
 
 Get the public keys and revocation list informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. `certInfo` is returned as a `buffer` containing the serialized information to be passed to a verifier.
 
