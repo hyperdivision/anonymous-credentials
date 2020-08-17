@@ -120,7 +120,7 @@ If a malicious user is detected, the `transcript` associated with their credenti
 
 /* --- Issuer --- */ 
 
-// check incidentReport, if user is at fault
+// check incidentReport, if user is at fault:
 (transcript) => {
   issuer.revokeCredential(transcript.sig.pk, transcript.certId, (err) => {
     // user has now been revoked
