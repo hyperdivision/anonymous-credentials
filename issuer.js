@@ -11,7 +11,9 @@ module.exports = class Issuer {
     this._storage = storage
   }
 
-  addIssuance (application) {
+  addIssuance (msg) {
+    const application = parseApplication(msg)
+
     const cert = this.certifications[application.certId]
 
     const issuance = cert.issue(application.details)
@@ -123,4 +125,28 @@ function serializeId (id, buf, offset) {
 
   serializeId.bytes = offset - startIndex
   return buf
+}
+
+function parseApplication (buf, offset) {
+  if (!offset) offset = 0
+  const startIndex = offset
+
+  const app = {}
+
+  app.tag = buf.subarray(offset, offset + 6).toString('hex')
+  offset += 6
+
+  app.certId = buf.subarray(offset, offset + 32).toString('hex')
+  offset += 32
+
+  const len = buf.readUInt32LE(offset)
+  offset += 4
+
+  const json = buf.subarray(offset, offset + len).toString()
+  offset += len
+
+  app.details = JSON.parse(json)
+
+  parseApplication.bytes = offset - startIndex
+  return app
 }

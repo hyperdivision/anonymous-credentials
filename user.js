@@ -21,11 +21,13 @@ module.exports = class User {
       identity
     })
 
-    return {
+    const app = {
       details,
       certId,
       tag
     }
+
+    return encodeApplication(app)
   }
 
   obtain (buf) {
@@ -157,4 +159,27 @@ function decodeIssuanceResponse (buf, offset) {
 
   decodeIssuanceResponse.bytes = offset - startIndex
   return response
+}
+
+function encodeApplication (app, buf, offset) {
+  const json = JSON.stringify(app.details)
+
+  if (!buf) buf = Buffer.alloc(json.length + 42)
+  if (!offset) offset = 0
+  const startIndex = offset
+  
+  buf.write(app.tag, offset, 'hex')
+  offset += 6
+
+  buf.write(app.certId, offset, 'hex')
+  offset += 32
+
+  buf.writeUInt32LE(json.length, offset)
+  offset += 4
+
+  buf.write(json, offset)
+  offset += json.length
+
+  encodeApplication.bytes = offset - startIndex
+  return buf
 }
