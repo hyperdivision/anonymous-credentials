@@ -117,7 +117,7 @@ class Credential {
     offset += curve.encodeG1.bytes
 
     for (let S of this._S) {
-      curve.encodeG1(k, buf, offset)
+      curve.encodeG1(S, buf, offset)
       offset += curve.encodeG1.bytes
     }
 
@@ -129,7 +129,7 @@ class Credential {
   }
 
   encodingLength () {
-    let len = o
+    let len = 0
 
     len += 8
     len += 32 * (this.k.length + 1)
@@ -140,6 +140,7 @@ class Credential {
 
   static parse (buf, offset) {
     if (!offset) offset = 0
+    const startIndex = offset
 
     const kLen = buf.readUInt32LE(offset)
     offset += 4
@@ -160,7 +161,7 @@ class Credential {
     cred.S = curve.decodeG1(buf, offset)
     offset += curve.decodeG1.bytes
 
-    for (let i = 0; i < kLen - 1; i++) {
+    for (let i = 0; i < kLen; i++) {
       cred._S[i] = curve.decodeG1(buf, offset)
       offset += curve.decodeG1.bytes
     }

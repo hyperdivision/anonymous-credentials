@@ -63,6 +63,48 @@ module.exports = class User {
   findId (required) {
     return this.identities.find(id => hasAttributes(id.attributes, required))
   }
+
+  serialize (buf, offset) {
+    if (!buf) buf = Buffer.alloc(this.encodingLength())
+    if (!offset) offset = 0
+    const startIndex = offset
+
+    buf.writeUInt32LE(this.identities.length, offset)
+    offset += 4
+
+    for (let id of this.identities) {
+      id.serialize(buf, offset)
+      offset += id.serialize.bytes
+    }
+
+    this.serialize.bytes = offset - startIndex
+    return buf
+  }
+
+  encodingLength () {
+    let len = 4
+    for (let id of this.identities) len += id.encodingLength()
+
+    return len
+  }
+
+  static parse (buf, offset) {
+    if (!offset) offset = 0
+    const startIndex = offset
+
+    const user = new User()
+
+    const ids = buf.readUInt32LE(offset)
+    offset += 4
+
+    for (let i = 0; i < ids; i++) {
+      user.identities.push(Identity.parse(buf, offset))
+      offset += Identity.parse.bytes
+    }
+
+    User.parse.bytes = offset - startIndex
+    return user
+  }
 }
 
 function hasAttributes(id, attrs) {
