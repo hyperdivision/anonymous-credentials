@@ -59,9 +59,9 @@ module.exports = class Issuer {
     })
   }
 
-  revokeCredential (toBeRevoked, certId, cb) {
-    const cert = this.certifications[certId]
-    cert.revoke(toBeRevoked, cb)
+  revokeCredential (identifier, cb) {
+    const cert = this.certifications[identifier.certId]
+    cert.revoke(identifier.pk, cb)
   }
 
   getPublicCert (certId) {

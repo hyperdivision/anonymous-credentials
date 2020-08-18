@@ -102,12 +102,13 @@ const transcript = user.present(['age', 'nationality'])
 
  /* --- Server Side --- */
 
-verifier.validate(transcript, (err) => {
+verifier.validate(transcript, (err, identifier) => {
   if (err) {
     // handle reject user
   }
 
-  // continue service
+  // identifier should be associated with this user
+  // as it is needed to report malicious parties
 })
 ```
 
@@ -116,13 +117,13 @@ If a malicious user is detected, the `transcript` associated with their credenti
 ```js
 /* --- Verifier --- */ 
 
-(transcript, { incidentReport }) --> issuer
+(identifier, { incidentReport }) --> issuer
 
 /* --- Issuer --- */ 
 
 // check incidentReport, if user is at fault:
-(transcript) => {
-  issuer.revokeCredential(transcript.sig.pk, transcript.certId, (err) => {
+(identifier) => {
+  issuer.revokeCredential(identifier, (err) => {
     // user has now been revoked
   })
 }
@@ -144,9 +145,9 @@ Begin a new issuance protocol. This method takes a user's `application`, which i
 
 This is the Issuer's final step during issuance and takes the output of `user.obtain`. In this step the Issuer contributes entropy towards the users credential and seals the credential by exponentiating the product of all curve points in the credential by the Issuer's secret key. This term is used in a bilinear pairing equality to verify the sum of exponents during verification of the credential.
 
-#### async org.revokeCredential(transcript, certId, cb())
+#### async org.revokeCredential(identifier, cb())
 
-Revoke a credential associated with a given `transcript`. This method shall publish the root id associated with this key to the certifications revocation list, anyone subscribed to the revocation list may then derive all keys associated with the root id and checks against these keys during verification.
+Revoke a credential associated with a given `identifier`. This method shall publish the root id associated with this key to the certifications revocation list, anyone subscribed to the revocation list may then derive all keys associated with the root id and checks against these keys during verification.
 
 #### async org.addCertification(schema, cb(certId))
 
@@ -198,9 +199,11 @@ Access an identity containing the attributes listed in `required`. Takes an `arr
 
 Instantiate a new Verifier. `storage` should be a path designated where revocation list data shall be stored.
 
-#### async verifier.validate(transcript, cb(err))
+#### async verifier.validate(transcript, cb(err, identifier))
 
-Validate a given `transcript`, which is the `buffer` returned by `user.present`. `cb` should have the signature `cb(err)` . An error message shall be passed to `cb` if validation fails, otherwise `cb` is executed with no arguments.
+Validate a given `transcript`, which is the `buffer` returned by `user.present`. `cb` should have the signature `cb(err)` . An error message shall be passed to `cb` if validation fails.
+
+`identifier` is needed when reporting bad users to the issuing party, therefore it should be associated with that user account.
 
 #### async verifier.registerCertification(cert, cb())
 

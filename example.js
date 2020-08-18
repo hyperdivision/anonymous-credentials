@@ -43,10 +43,13 @@ org.addCertification(schema, function (certId) {
     // user stores the credential
     user.store(granted)
 
-    // user selects which attributes to show
-    const present = user.present(['age', 'drivers licence'])
+    const buf = user.serialize()
+    const sameUser = User.parse(buf)
 
-    verifier.validate(present, function (err) {
+    // user selects which attributes to show
+    const present = sameUser.present(['age', 'drivers licence'])
+
+    verifier.validate(present, function (err, identifier) {
       if (err) throw err
       console.log('credential has been accepted.')
 
@@ -55,9 +58,9 @@ org.addCertification(schema, function (certId) {
         sk: Buffer.alloc(64)
       }
 
-      const revoke = user.identities[0].pseudonym.loadIdentity(130, keys).pk
+      identifier.pk = user.identities[0].pseudonym.loadIdentity(130, keys).pk
 
-      org.revokeCredential(revoke, certId, function (err, i) {
+      org.revokeCredential(identifier, function (err, i) {
         verifier.certifications[certId].revocationList.feed.on('download', async () => {
           const presentRevoked = user.present(['age', 'drivers licence'])
 

@@ -36,7 +36,13 @@ module.exports = class Verifier {
       return cb(new Error('credential cannot be verified'))
     }
 
-    return cb()
+    // identifier should be stored and used to report a user to the issuer
+    const identifier = {
+      pk: sig.pk,
+      certId
+    }
+
+    return cb(null, identifier)
 
     // move attributes away from here, disclosed should give all info needed
     function format ([attribute, value]) {
