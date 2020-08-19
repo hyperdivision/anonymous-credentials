@@ -93,8 +93,7 @@ class Identifier {
     T[2] = G1.affine(G1.add(this.w.c, G1.mulScalar(this.pk.h, F.add(alpha, beta))))
     T[3] = G1.affine(G1.mulScalar(this.pk.u, gamma))
     T[4] = G1.affine(G1.mulScalar(this.pk.v, delta))
-    T[5] = G1.affine(G1.add(G1.mulScalar(this.pk.g1, this.w.d), G1.mulScalar(this.pk.h, F.add(gamma, delta))))
-    T[6] = G1.affine(G1.mulScalar(T[5], F.inv(F.add(gamma, delta))))
+    T[5] = G1.affine(G1.add(G1.mulScalar(this.pk.g1, F.mul(this.w.d, F.inv(F.add(gamma, delta)))), this.pk.h))
 
     const delta1 = F.mul(this.y, alpha)
     const delta2 = F.mul(this.y, beta)
@@ -107,18 +106,17 @@ class Identifier {
     const precomp_r1y_r2 = F.neg(F.add(F.add(blinds[3], blinds[4]), F.add(blinds[5], blinds[6])))
     const precomp = F12.mul(F12.exp(this.pk.e.ha, precomp_r1), F12.exp(this.pk.e.hg, precomp_r1y_r2))
 
-    const pairingT2 = F12.exp(curve.pairing(T[2], this.pk.g2), blinds[2])
-    const pairingT5 = curve.pairing(T[5], this.pk.g2)
+    const pairingT2 = curve.pairing(G1.mulScalar(T[2], blinds[2]), this.pk.g2)
+    const pairingT5 = curve.pairing(G1.mulScalar(T[5], F.neg(F.add(blinds[5], blinds[6]))), this.pk.g2)
 
     const R = []
     R[0] = G1.affine(G1.mulScalar(this.pk.u, blinds[0]))
     R[1] = G1.affine(G1.mulScalar(this.pk.v, blinds[1]))
-    R[2] = F12.mul(pairingT2, precomp)
+    R[2] = F12.div(F12.mul(pairingT2, precomp), pairingT5)
     R[3] = G1.affine(G1.sub(G1.mulScalar(T[0], blinds[2]), G1.mulScalar(this.pk.u, blinds[3])))
     R[4] = G1.affine(G1.sub(G1.mulScalar(T[1], blinds[2]), G1.mulScalar(this.pk.v, blinds[4])))
     R[5] = G1.affine(G1.mulScalar(this.pk.u, blinds[5]))
     R[6] = G1.affine(G1.mulScalar(this.pk.v, blinds[6]))
-    R[7] = curve.pairing(G1.mulScalar(T[6], F.neg(F.add(blinds[5], blinds[6]))), this.pk.g2)
 
     const c = hash(...T, ...R)
 
@@ -143,27 +141,33 @@ class Identifier {
 function verify (showing, pk) {
   const { T, R, c, cBlinds } = showing
 
-  if (F12.eq(curve.pairing(T[6], pk.g2), pk.e.hg)) return false
+  if (F12.eq(curve.pairing(T[5], pk.g2), pk.e.hg)) return false
 
   const precomp_r1 = F.neg(F.add(cBlinds[0], cBlinds[1]))
-  const precomp_r2 = F.neg(F.add(cBlinds[5], cBlinds[6]))
+  const precomp_r2 = F.add(cBlinds[5], cBlinds[6])
   const precomp_r1y = F.neg(F.add(cBlinds[3], cBlinds[4]))
   const precomp_vg_c = F12.exp(pk.e.vg, F.neg(c))
-  const precomp = F12.mul(F12.mul(F12.exp(pk.e.ha, precomp_r1), F12.exp(pk.e.hg, precomp_r1y)), F12.exp(pk.e.hg, precomp_r2))
+  const precomp = F12.mul(F12.mul(F12.exp(pk.e.ha, precomp_r1), F12.exp(pk.e.hg, precomp_r1y)), F12.exp(pk.e.hg, F.neg(precomp_r2)))
 
   const pairingT2 = curve.pairing(T[2], G2.add(G2.mulScalar(pk.a, c), G2.mulScalar(pk.g2, cBlinds[2])))
-  const pairingT5 = curve.pairing(T[5], G2.mulScalar(pk.g2, c))
-  const pairingT6 = curve.pairing(G1.mulScalar(T[6], precomp_r2), pk.g2)
+  const pairingT5 = curve.pairing(G1.mulScalar(T[5], precomp_r2), pk.g2)
 
   const R_ = []
   R_[0] = G1.affine(G1.sub(G1.mulScalar(pk.u, cBlinds[0]), G1.mulScalar(T[0], c)))
   R_[1] = G1.affine(G1.sub(G1.mulScalar(pk.v, cBlinds[1]), G1.mulScalar(T[1], c)))
-  R_[2] = F12.mul(F12.mul(F12.mul(pairingT2, precomp_vg_c), precomp), pairingT5)
+  R_[2] = F12.mul(F12.mul(F12.mul(pairingT2, pairingT5), precomp_vg_c), precomp)
   R_[3] = G1.affine(G1.sub(G1.mulScalar(T[0], cBlinds[2]), G1.mulScalar(pk.u, cBlinds[3])))
   R_[4] = G1.affine(G1.sub(G1.mulScalar(T[1], cBlinds[2]), G1.mulScalar(pk.v, cBlinds[4])))
   R_[5] = G1.affine(G1.sub(G1.mulScalar(pk.u, cBlinds[5]), G1.mulScalar(T[3], c)))
   R_[6] = G1.affine(G1.sub(G1.mulScalar(pk.v, cBlinds[6]), G1.mulScalar(T[4], c)))
-  R_[7] = F12.mul(pairingT6, pairingT5)
+
+  // for (let i = 0; i < 7; i++) {
+  //   try {
+  //     if (!G1.eq(R[i], R_[i])) console.log(i)
+  //   } catch {
+  //     if (!F12.eq(R[i], R_[i])) console.log(i)
+  //   }
+  // }
 
   const check = hash(...T, ...R_)
   return F.eq(c, check)
