@@ -6,66 +6,137 @@ const assert = require('nanoassert')
 const { F, F12, G1, G2 } = curve
 
 module.exports = {
-  Issuer,
-  verify,
-  show
+  verify
 }
 
-function Issuer () {
-  if (!(this instanceof Issuer)) return new Issuer()
+module.exports.Revoker = class Revoker {
+  constructor () {
+    this.acc = new Accumulator
+    this.users = []
+    this.revoked = []
 
-  const acc = new Accumulator()
+    this.secrets = {}
+    this.secrets.alpha = this.acc.alpha
+    this.secrets.xi1 = curve.randomScalar()
+    this.secrets.xi2 = curve.randomScalar()
 
-  const users = []
+    this.pubkey = {}
+    this.pubkey.g1 = this.acc.g1
+    this.pubkey.u = curve.randomPointG1()
+    this.pubkey.h = G1.mulScalar(this.pubkey.u, this.secrets.xi1)
+    this.pubkey.v = G1.mulScalar(this.pubkey.h, F.inv(this.secrets.xi2))
 
-  const secrets = {}
-  secrets.alpha = acc.alpha
-  secrets.xi1 = curve.randomScalar()
-  secrets.xi2 = curve.randomScalar()
-
-  const pubkey = {}
-  pubkey.g1 = acc.g1
-  pubkey.u = curve.randomPointG1()
-  pubkey.h = G1.mulScalar(pubkey.u, secrets.xi1)
-  pubkey.v = G1.mulScalar(pubkey.h, F.inv(secrets.xi2))
-
-  pubkey.g2 = acc.g2
-  pubkey.a = G2.mulScalar(pubkey.g2, secrets.alpha)
-
-  pubkey.secrets = secrets
-  
-  pubkey.e = {}
-  pubkey.e.gg = curve.pairing(pubkey.g1, pubkey.g2)
-  pubkey.e.vg = curve.pairing(acc.acc, pubkey.g2)
-  pubkey.e.hg = curve.pairing(pubkey.h, pubkey.g2)
-  pubkey.e.ha = curve.pairing(pubkey.h, pubkey.a)
-  pubkey.acc = acc
-
-  function issue () {
-    const id = acc.new()
+    this.pubkey.g2 = this.acc.g2
+    this.pubkey.a = G2.mulScalar(this.pubkey.g2, this.secrets.alpha)
+    this.pubkey.acc = this.acc.acc
     
-    users.push(id)
-    return id
+    this.pubkey.e = {}
+    this.pubkey.e.gg = curve.pairing(this.pubkey.g1, this.pubkey.g2)
+    this.pubkey.e.vg = curve.pairing(this.acc.acc, this.pubkey.g2)
+    this.pubkey.e.hg = curve.pairing(this.pubkey.h, this.pubkey.g2)
+    this.pubkey.e.ha = curve.pairing(this.pubkey.h, this.pubkey.a)
   }
 
-  function open (showing, r) {
-    assert(verify(showing, pubkey), 'opening failed: invalid signature')
+  issue () {
+    const id = this.acc.new()
+    this.users.push(id)
+
+    const identifier = new Identifier(id, this.pubkey)
+    return identifier
+  }
+
+  open (showing, r) {
+    assert(verify(showing, this.pubkey), 'opening failed: invalid signature')
 
     const { T } = showing
-    const c = G1.sub(T[2], G1.add(G1.mulScalar(T[0], secrets.xi1), G1.mulScalar(T[1], secrets.xi2)))
+    const c = G1.sub(T[2], G1.add(G1.mulScalar(T[0], this.secrets.xi1), G1.mulScalar(T[1], this.secrets.xi2)))
 
-    const user = users.find(u => G1.eq(u.witness.c, c))
+    const user = this.users.find(u => G1.eq(u.witness.c, c))
     return user
   }
 
-  function getPubkey () {
-    return pubkey
+  revoke (user) {
+    const acc = this.acc.acc
+    this.acc.add(user.y)
+    this.revoked.push(user)
+
+    this.pubkey.acc = this.acc.acc
+    this.pubkey.e.vg = curve.pairing(this.acc.acc, this.pubkey.g2)
+
+    return {
+      acc,
+      y: user.y
+    }
   }
 
-  return {
-    issue,
-    open,
-    getPubkey
+  getPubkey () {
+    return this.pubkey
+  }
+}
+
+class Identifier {
+  constructor (id, pk) {
+    this.y = id.y
+    this.w = id.witness
+    this.pk = pk
+  }
+
+  show () {
+    const alpha = curve.randomScalar()
+    const beta = curve.randomScalar()
+    const gamma = curve.randomScalar()
+    const delta = curve.randomScalar()
+
+    const T = []
+    T[0] = G1.affine(G1.mulScalar(this.pk.u, alpha))
+    T[1] = G1.affine(G1.mulScalar(this.pk.v, beta))
+    T[2] = G1.affine(G1.add(this.w.c, G1.mulScalar(this.pk.h, F.add(alpha, beta))))
+    T[3] = G1.affine(G1.mulScalar(this.pk.u, gamma))
+    T[4] = G1.affine(G1.mulScalar(this.pk.v, delta))
+    T[5] = G1.affine(G1.add(G1.mulScalar(this.pk.g1, this.w.d), G1.mulScalar(this.pk.h, F.add(gamma, delta))))
+
+    const delta1 = F.mul(this.y, alpha)
+    const delta2 = F.mul(this.y, beta)
+
+    const blinds = []
+
+    for (let i = 0; i < 7; i++) blinds.push(curve.randomScalar())
+
+    const precomp_r1 = F.neg(F.add(blinds[0], blinds[1]))
+    const precomp_r1y_r2 = F.neg(F.add(F.add(blinds[3], blinds[4]), F.add(blinds[5], blinds[6])))
+    const precomp = F12.mul(F12.exp(this.pk.e.ha, precomp_r1), F12.exp(this.pk.e.hg, precomp_r1y_r2))
+
+    const pairingT3 = F12.exp(curve.pairing(T[2], this.pk.g2), blinds[2])
+    const pairingT6 = curve.pairing(T[5], this.pk.g2)
+
+    const R = []
+    R[0] = G1.affine(G1.mulScalar(this.pk.u, blinds[0]))
+    R[1] = G1.affine(G1.mulScalar(this.pk.v, blinds[1]))
+    R[2] = F12.mul(pairingT3, precomp)
+    R[3] = G1.affine(G1.sub(G1.mulScalar(T[0], blinds[2]), G1.mulScalar(this.pk.u, blinds[3])))
+    R[4] = G1.affine(G1.sub(G1.mulScalar(T[1], blinds[2]), G1.mulScalar(this.pk.v, blinds[4])))
+    R[5] = G1.affine(G1.mulScalar(this.pk.u, blinds[5]))
+    R[6] = G1.affine(G1.mulScalar(this.pk.v, blinds[6]))
+
+    const c = hash(...T, ...R)
+
+    const cBlinds = [alpha, beta, this.y, delta1, delta2, gamma, delta].map((scalar, i) => {
+      return F.add(blinds[i], F.mul(c, scalar))
+    })
+
+    return {
+      T,
+      c,
+      cBlinds,
+    }
+  }
+
+  update (info) {
+    const diff = F.sub(info.y, this.y)
+    console.log(diff)
+    this.w.c = G1.affine(G1.add(info.acc, G1.mulScalar(this.w.c, diff)))
+    this.w.d = F.mul(this.w.d, diff)
+    console.log(this.w)
   }
 }
 
@@ -94,62 +165,6 @@ function verify (showing, pk) {
   return F.eq(c, check)
 }
 
-function show (id, pk) {
-  const alpha = curve.randomScalar()
-  const beta = curve.randomScalar()
-  const gamma = curve.randomScalar()
-  const delta = curve.randomScalar()
-
-  const T = []
-  T[0] = G1.affine(G1.mulScalar(pk.u, alpha))
-  T[1] = G1.affine(G1.mulScalar(pk.v, beta))
-  T[2] = G1.affine(G1.add(id.witness.c, G1.mulScalar(pk.h, F.add(alpha, beta))))
-  T[3] = G1.affine(G1.mulScalar(pk.u, gamma))
-  T[4] = G1.affine(G1.mulScalar(pk.v, delta))
-  T[5] = G1.affine(G1.add(G1.mulScalar(pk.g1, id.witness.d), G1.mulScalar(pk.h, F.add(gamma, delta))))
-
-  const delta1 = F.mul(id.y, alpha)
-  const delta2 = F.mul(id.y, beta)
-
-  const blinds = []
-  for (let i = 0; i < 7; i++) blinds.push(curve.randomScalar())
-
-  const precomp_r1 = F.neg(F.add(blinds[0], blinds[1]))
-  const precomp_r1y_r2 = F.neg(F.add(F.add(blinds[3], blinds[4]), F.add(blinds[5], blinds[6])))
-  const precomp = F12.mul(F12.exp(pk.e.ha, precomp_r1), F12.exp(pk.e.hg, precomp_r1y_r2))
-
-  const pairingT3 = F12.exp(curve.pairing(T[2], pk.g2), blinds[2])
-  const pairingT6 = curve.pairing(T[5], pk.g2)
-
-  const R = []
-  R[0] = G1.affine(G1.mulScalar(pk.u, blinds[0]))
-  R[1] = G1.affine(G1.mulScalar(pk.v, blinds[1]))
-  R[2] = F12.mul(pairingT3, precomp)
-  R[3] = G1.affine(G1.sub(G1.mulScalar(T[0], blinds[2]), G1.mulScalar(pk.u, blinds[3])))
-  R[4] = G1.affine(G1.sub(G1.mulScalar(T[1], blinds[2]), G1.mulScalar(pk.v, blinds[4])))
-  R[5] = G1.affine(G1.mulScalar(pk.u, blinds[5]))
-  R[6] = G1.affine(G1.mulScalar(pk.v, blinds[6]))
-
-  const r1 = F.neg(F.add(alpha, beta))
-  const r2 = F.neg(F.add(gamma, delta))
-  const T3g = curve.pairing(T[2], pk.g2)
-  const T3a = curve.pairing(T[2], pk.a)
-  const T6g = curve.pairing(T[5], pk.g2)
-  const r1y = F.mul(r1, id.y)
-
-  const c = hash(...T, ...R)
-
-  const cBlinds = [alpha, beta, id.y, delta1, delta2, gamma, delta].map((scalar, i) => {
-    return F.add(blinds[i], F.mul(c, scalar))
-  })
-
-  return {
-    T,
-    c,
-    cBlinds,
-  }
-}
-
 function hash (...elements) {
   const data = Buffer.alloc(48 * 32)
   let offset = 0
@@ -166,23 +181,4 @@ function hash (...elements) {
 
   const digest = sha256().update(data).digest()
   return curve.scalarFrom(digest)
-}
-
-function invModulo (a, mod) {
-  // assert(a, "Division by zero");
-
-  let t = 0n;
-  let r = mod
-
-  let newt = 1n
-  let newr = a % mod
-
-  while (newr) {
-    let q = r / newr;
-    [t, newt] = [newt, t - q * newt];
-    [r, newr] = [newr, r - q * newr];
-  }
-
-  if (t<0n) t += mod
-  return t
 }

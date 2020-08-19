@@ -5,15 +5,15 @@ const { F, F12, G1, G2 } = curve
 module.exports = class Accumulator {
   constructor () {
     this.alpha = curve.randomScalar()
-    this.acc = G1.g
-    this.e = curve.pairing
     this.g1 = curve.randomPointG1()
     this.g2 = curve.randomPointG2()
-    this.init = curve.scalarFrom(1)
-    this.product = F.one + this.alpha
+
+    this.acc = this.g1
+    this.e = curve.pairing
+
+    this.product = F.one
     this.e = curve.pairing(this.g1, this.g2)
 
-    this.add(1n)
     this.add(curve.randomScalar())
     this.add(curve.randomScalar())
   }
@@ -47,7 +47,7 @@ module.exports = class Accumulator {
   add (y) {
     const yplusa = F.add(this.alpha, y)
     this.product = F.mul(this.product, yplusa)
-    this.acc = G1.mulScalar(this.g1, this.product)
+    this.acc = G1.mulScalar(this.acc, yplusa)
 
     return y
   }
