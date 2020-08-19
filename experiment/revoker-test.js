@@ -10,14 +10,22 @@ const id = org.issue()
 const show = id.show()
 // console.log('show: ', show)
 
+console.time('verify')
 console.log('initial showing:', verify(show, org.getPubkey()))
+console.timeEnd('verify')
 
+console.time('revoke')
 const revInfo = org.revoke({ y: curve.randomScalar() })
+console.timeEnd('revoke')
 
+console.time('update')
 id.update(revInfo)
+console.timeEnd('update')
 
+console.time('show')
 const show2 = id.show()
 console.log('second showing:', verify(show2, org.getPubkey()))
+console.timeEnd('show')
 
 const revid = org.open(show2)
 const rev = org.revoke(revid)
