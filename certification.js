@@ -3,6 +3,7 @@ const keys = require('./lib/keygen')
 const sodium = require('sodium-native')
 const RevocationList = require('./revocation-list')
 const IssuingProtocol = require('./issuance.js')
+const inspect = Symbol.for('nodejs.util.inspect.custom');
 
 const hasProperty = Object.prototype.hasOwnProperty
 
@@ -48,7 +49,7 @@ class PrivateCertification {
     }
 
     const pubCert = new PublicCertification(publicInfo)
-    return pubCert.serialize()
+    return pubCert.encode()
   }
 
   addCredential (cred) {
@@ -78,7 +79,7 @@ class PrivateCertification {
     this.revocationList.add(revokeRoot, cb)
   }
 
-  serialize (buf, offset) {
+  encode (buf, offset) {
     if (!buf) buf = Buffer.alloc()
     if (!offset) offset = 0
     const startIndex = offset
@@ -87,8 +88,8 @@ class PrivateCertification {
     offset += 4
 
     for (const cred of this.credentials) {
-      cred.serialize(buf, offset)
-      offset += cred.serialize.bytes
+      cred.encode(buf, offset)
+      offset += cred.encode.bytes
     }
 
     buf.set(this.certId, offset)
@@ -107,7 +108,7 @@ class PrivateCertification {
     buf.set(serializedSchema, offset)
     offset += serializedSchema.byteLength
 
-    this.serialize.bytes = offset - startIndex
+    this.encode.bytes = offset - startIndex
     return buf
   }
 
@@ -124,7 +125,7 @@ class PrivateCertification {
     return len
   }
 
-  static parse (buf, offset) {
+  static decode (buf, offset) {
     if (!offset) offset = 0
     const startIndex = offset
 
@@ -136,8 +137,8 @@ class PrivateCertification {
 
     opts.credentials = []
     for (let i = 0; i < credentialsLen; i++) {
-      opts.credentials.push(Credential.parse(buf, offset))
-      offset += Credential.parse.bytes
+      opts.credentials.push(Credential.decode(buf, offset))
+      offset += Credential.decode.bytes
     }
 
     opts.certId = buf.subarray(offset, offset + 32)
@@ -155,7 +156,7 @@ class PrivateCertification {
     opts.schema = JSON.parse(buf.subarray(offset, offset + schemaLen).toString())
     offset += schemaLen
 
-    PrivateCertification.parse.bytes = offset - startIndex
+    PrivateCertification.decode.bytes = offset - startIndex
     return new PrivateCertification(opts)
   }
 }
@@ -175,7 +176,7 @@ class PublicCertification {
     }
   }
 
-  serialize (buf, offset) {
+  encode (buf, offset) {
     const serializedSchema = Buffer.from(JSON.stringify(this.schema))
 
     if (!buf) buf = Buffer.alloc(this.encodingLength())
@@ -197,11 +198,11 @@ class PublicCertification {
     buf.set(serializedSchema, offset)
     offset += serializedSchema.byteLength
 
-    this.serialize.bytes = startIndex - offset
+    this.encode.bytes = startIndex - offset
     return buf
   }
 
-  static parse (buf, offset) {
+  static decode (buf, offset) {
     if (!offset) offset = 0
     const startIndex = offset
 
@@ -222,7 +223,7 @@ class PublicCertification {
     opts.schema = JSON.parse(buf.subarray(offset, offset + schemaLen).toString())
     offset += schemaLen
 
-    PublicCertification.parse.bytes = offset - startIndex
+    PublicCertification.decode.bytes = offset - startIndex
     return new PublicCertification(opts)
   }
 
@@ -243,7 +244,7 @@ class Credential {
     this.root = opts.root
   }
 
-  serialize (buf, offset) {
+  encode (buf, offset) {
     const encodedAttr = Buffer.from(JSON.stringify(this.attr))
     if (!buf) buf = Buffer.alloc(36 + encodedAttr.byteLength)
     if (!offset) offset = 0
@@ -258,7 +259,7 @@ class Credential {
     buf.set(root)
     offset += 32
 
-    this.serialize.bytes = offset - startIndex
+    this.encode.bytes = offset - startIndex
     return buf
   }
 
@@ -270,7 +271,7 @@ class Credential {
     return len
   }
 
-  static parse (buf, offset) {
+  static decode (buf, offset) {
     if (!offset) offset = 0
     const startIndex = offset
 
@@ -285,7 +286,7 @@ class Credential {
     opts.root = buf.subarray(offset, offset + 32)
     offset += 32
 
-    Credential.parse.bytes = offset - startIndex
+    Credential.decode.bytes = offset - startIndex
     return new Credential(opts)
   }
 }
@@ -298,32 +299,6 @@ function shasum (data) {
   const hash = Buffer.alloc(sodium.crypto_hash_sha256_BYTES)
   sodium.crypto_hash_sha256(hash, data)
   return hash
-}
-
-// write proper encoding library
-function serialize (obj) {
-  let result = ''
-
-  if (obj.buffer) result += obj.buffer.toString('hex')
-  else if (Array.isArray(obj)) {
-    for (const entry of obj) result += serialize(entry)
-  } else if (typeof obj === 'object') {
-    for (const item of Object.values(obj)) {
-      result += serialize(item)
-    }
-  } else {
-    try {
-      result += obj.toString(16)
-    } catch {
-      result += obj.toString('hex')
-    }
-  }
-
-  return result
-}
-
-function deserialize (str) {
-  const obj = JSON.parse(str)
 }
 
 module.exports = {

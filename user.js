@@ -3,6 +3,7 @@ const Identity = require('./identity')
 const credential = require('./credential')
 const keys = require('./lib/keygen')
 const crypto = require('crypto')
+const { Application, SetupMessage, ObtainMessage, StoreMessage } = require('./wire')
 
 module.exports = class User {
   constructor () {
@@ -21,31 +22,23 @@ module.exports = class User {
       identity
     })
 
-    const app = {
-      details,
-      certId,
-      tag
-    }
-
-    return encodeApplication(app)
+    const app = new Application(tag, certId, details)
+    return app.encode()
   }
 
   obtain (buf) {
-    const msg = decodeSetup(buf)
+    const setupMessage = SetupMessage.decode(buf)
 
-    const id = this.applications.find(app => app.tag === msg.tag).identity
-    const details = id.credential.obtain(msg)
+    const id = this.applications.find(app => app.tag === setupMessage.tag).identity
+    const details = id.credential.obtain(setupMessage.setup)
 
-    const info = {
-      tag: msg.tag,
-      details
-    }
+    const obtainMessage = new ObtainMessage(setupMessage.tag, details)
 
-    return encodeObtain(info)
+    return obtainMessage.encode()
   }
 
   store (buf) {
-    const msg = decodeStoreMsg(buf)
+    const msg = StoreMessage.decode(buf)
 
     const index = this.applications.findIndex(app => app.tag === msg.tag)
     const id = this.applications[index].identity
@@ -57,14 +50,16 @@ module.exports = class User {
 
   present (attributes) {
     const id = this.findId(attributes)
-    return id.present(attributes)
+    const presentation = id.present(attributes)
+
+    return presentation.encode()
   }
 
   findId (required) {
     return this.identities.find(id => hasAttributes(id.attributes, required))
   }
 
-  serialize (buf, offset) {
+  encode (buf, offset) {
     if (!buf) buf = Buffer.alloc(this.encodingLength())
     if (!offset) offset = 0
     const startIndex = offset
@@ -73,11 +68,11 @@ module.exports = class User {
     offset += 4
 
     for (let id of this.identities) {
-      id.serialize(buf, offset)
-      offset += id.serialize.bytes
+      id.encode(buf, offset)
+      offset += id.encode.bytes
     }
 
-    this.serialize.bytes = offset - startIndex
+    this.encode.bytes = offset - startIndex
     return buf
   }
 
@@ -88,7 +83,7 @@ module.exports = class User {
     return len
   }
 
-  static parse (buf, offset) {
+  static decode (buf, offset) {
     if (!offset) offset = 0
     const startIndex = offset
 
@@ -98,11 +93,11 @@ module.exports = class User {
     offset += 4
 
     for (let i = 0; i < ids; i++) {
-      user.identities.push(Identity.parse(buf, offset))
-      offset += Identity.parse.bytes
+      user.identities.push(Identity.decode(buf, offset))
+      offset += Identity.decode.bytes
     }
 
-    User.parse.bytes = offset - startIndex
+    User.decode.bytes = offset - startIndex
     return user
   }
 }
@@ -113,115 +108,4 @@ function hasAttributes(id, attrs) {
 
 function rand () {
   return crypto.randomBytes(6)
-}
-
-function decodeSetup (buf, offset) {
-  if (!buf) buf = encodingLength(setup)
-  if (!offset) offset = 0
-  const startIndex = offset
-
-  const setup = {}
-
-  setup.tag = buf.subarray(offset, offset + 6).toString('hex')
-  offset += 6
-
-  setup.k = curve.decodeScalars(buf, offset)
-  offset += curve.decodeScalars.bytes
-
-  setup.K_ = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  setup.S_ = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  setup.S0_ = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  decodeSetup.bytes = offset - startIndex
-  return setup
-}
-
-function encodeObtain (obtain, buf, offset) {
-  if (!buf) buf = Buffer.alloc(6 + credential.obtainEncodingLength(obtain.details))
-  if (!offset) offset = 0
-  const startIndex = offset
-
-  buf.write(obtain.tag, offset, 'hex')
-  offset += 6
-
-  credential.serializeObtain(obtain.details, buf, offset)
-  offset += credential.serializeObtain.bytes
-
-  encodeObtain.bytes = offset - startIndex
-  return buf
-}
-
-function decodeStoreMsg (buf, offset) {
-  if (!offset) offset = 0
-  const startIndex = offset
-
-  const msg = {}
-  msg.tag = buf.subarray(offset, offset + 6).toString('hex')
-  offset += 6
-
-  msg.info = decodeIssuanceResponse(buf, offset)
-  offset += decodeIssuanceResponse.bytes
-
-  msg.identity = keys.decodeUserIds(buf, offset)
-  offset += keys.decodeUserIds.bytes
-
-  decodeStoreMsg.bytes = offset - startIndex
-  return msg
-}
-
-function decodeIssuanceResponse (buf, offset) {
-  if (!buf) buf = Buffer.alloc(36 + 96 * (_S.length + 2))
-  if (!offset) offset = 0
-  const startIndex = offset
-
-  const response = {}
-
-  response.kappa = curve.decodeScalar(buf, offset)
-  offset += curve.decodeScalar.bytes
-
-  response.K = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  const len = buf.readUInt32LE(offset)
-  offset += 4
-
-  response._S = []
-  for (let i = 0; i < len; i++) {
-    response._S.push(curve.decodeG1(buf, offset))
-    offset += curve.decodeG1.bytes
-  }
-
-  response.T = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  decodeIssuanceResponse.bytes = offset - startIndex
-  return response
-}
-
-function encodeApplication (app, buf, offset) {
-  const json = JSON.stringify(app.details)
-
-  if (!buf) buf = Buffer.alloc(json.length + 42)
-  if (!offset) offset = 0
-  const startIndex = offset
-  
-  buf.write(app.tag, offset, 'hex')
-  offset += 6
-
-  buf.write(app.certId, offset, 'hex')
-  offset += 32
-
-  buf.writeUInt32LE(json.length, offset)
-  offset += 4
-
-  buf.write(json, offset)
-  offset += json.length
-
-  encodeApplication.bytes = offset - startIndex
-  return buf
 }

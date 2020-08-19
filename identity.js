@@ -1,7 +1,8 @@
 const assert = require('nanoassert')
 const sodium = require('sodium-native')
 const keygen = require('./lib/keygen')
-const { Credential, serializeShowing, showingEncodingLength } = require('./credential')
+const Credential = require('./credential')
+const { Presentation, Signature } = require('./wire')
 const attributes = require('./lib/gen-attributes')
 
 module.exports = class Identity {
@@ -26,22 +27,14 @@ module.exports = class Identity {
       attributes.encode(v.toString()))
 
     const showing = this.credential.show(encoded)
-    const toSign = serializeShowing(showing)
+    const toSign = showing.encode()
 
     const sig = this.pseudonym.sign(Buffer.from(toSign, 'hex'))
-    this.pseudonym.update()
 
-    const presentation = {
-      disclosed,
-      showing,
-      sig,
-      certId: this.certId
-    }
-
-    return encodePresent(presentation)
+    return new Presentation(disclosed, showing, sig, this.certId)
   }
 
-  serialize (buf, offset) {
+  encode (buf, offset) {
     if (!buf) buf = Buffer.alloc(this.encodingLength())
     if (!offset) offset = 0
     const startIndex = offset
@@ -56,13 +49,13 @@ module.exports = class Identity {
     buf.write(this.certId, offset, 'hex')
     offset += 32
 
-    this.credential.serialize(buf, offset)
-    offset += this.credential.serialize.bytes
+    this.credential.encode(buf, offset)
+    offset += this.credential.encode.bytes
 
-    this.pseudonym.serialize(buf, offset)
-    offset += this.pseudonym.serialize.bytes
+    this.pseudonym.encode(buf, offset)
+    offset += this.pseudonym.encode.bytes
 
-    this.serialize.bytes = offset - startIndex
+    this.encode.bytes = offset - startIndex
     return buf
   }
 
@@ -78,7 +71,7 @@ module.exports = class Identity {
     return len
   }
 
-  static parse (buf, offset) {
+  static decode (buf, offset) {
     if (!offset) offset = 0
     const startIndex = offset
 
@@ -93,13 +86,13 @@ module.exports = class Identity {
 
     const id = new Identity(attrs, certId)
 
-    id.credential = Credential.parse(buf, offset)
-    offset += Credential.parse.bytes
+    id.credential = Credential.decode(buf, offset)
+    offset += Credential.decode.bytes
 
-    id.pseudonym = Pseudonym.parse(buf, offset)
-    offset += Pseudonym.parse.bytes
+    id.pseudonym = Pseudonym.decode(buf, offset)
+    offset += Pseudonym.decode.bytes
 
-    Identity.parse.bytes = offset - startIndex
+    Identity.decode.bytes = offset - startIndex
     return id
   }
 }
@@ -149,7 +142,24 @@ class Pseudonym {
     return keypair
   }
 
-  serialize (buf, offset) {
+  sign (msg) {
+    const sig = Buffer.alloc(sodium.crypto_sign_BYTES)
+    sodium.crypto_sign_detached(sig, msg, this.keys.sk)
+
+    const signature = new Signature(sig, this.keys.pk, this.keys.certSig)
+    this.update()
+
+    return signature
+  }
+
+  validate () {
+    for (let i = 0; i < this.sigs.length; i++) {
+      const { pk } = this.loadIdentity(i)
+      assert(sodium.crypto_sign_verify_detached(sigs[i], pk, certKey))
+    }
+  }
+
+  encode (buf, offset) {
     if (!buf) buf = Buffer.alloc(this.encodingLength())
     if (!offset) offset = 0
     const startIndex = offset
@@ -171,7 +181,7 @@ class Pseudonym {
     buf.set(this.certKey, offset)
     offset += this.certKey.length
 
-    this.serialize.bytes = offset - startIndex
+    this.encode.bytes = offset - startIndex
     return buf
   }
 
@@ -179,7 +189,7 @@ class Pseudonym {
     return 4 + (2 * this.sigs.length + 2) * 32
   }
 
-  static parse (buf, offset) {
+  static decode (buf, offset) {
     if (!offset) offset = 0
     const startIndex = offset
 
@@ -201,109 +211,7 @@ class Pseudonym {
     const certKey = buf.subarray(offset, offset + sodium.crypto_sign_PUBLICKEYBYTES)
     offset += sodium.crypto_sign_PUBLICKEYBYTES
 
-    Pseudonym.parse.bytes = offset - startIndex
+    Pseudonym.decode.bytes = offset - startIndex
     return new Pseudonym({ root, sigs, certKey }, count)
   }
-
-  sign (msg) {
-    const sig = Buffer.alloc(sodium.crypto_sign_BYTES)
-    const pk = Buffer.from(this.keys.pk)
-    const certSig = Buffer.from(this.keys.certSig)
-
-    sodium.crypto_sign_detached(sig, msg, this.keys.sk)
-
-    function encode (buf, offset) {
-      if (!buf) buf = Buffer.alloc(encodingLength())
-      if (!offset) offset = 0
-      const startIndex = offset
-
-      buf.set(sig, offset)
-      offset += sig.byteLength
-
-      buf.set(pk, offset)
-      offset += pk.byteLength
-
-      buf.set(certSig, offset)
-      offset += certSig.byteLength
-
-      encode.bytes = offset - startIndex
-      return buf
-    }
-
-    function encodingLength () {
-      return 2 * sodium.crypto_sign_BYTES + sodium.crypto_sign_PUBLICKEYBYTES
-    }
-
-    return {
-      signature: sig,
-      pk,
-      certSig,
-      encode,
-      encodingLength
-    }
-  }
-
-  validate () {
-    for (let i = 0; i < this.sigs.length; i++) {
-      const { pk } = this.loadIdentity(i)
-      assert(sodium.crypto_sign_verify_detached(sigs[i], pk, certKey))
-    }
-  }
-}
-
-function encodePresent (present, buf, offset) {
-  if (!buf) buf = Buffer.alloc(presentEncodingLength(present))
-  if (!offset) offset = 0
-  const startIndex = offset
-
-  buf.writeUInt32LE(Object.values(present.disclosed).length, offset)
-  offset += 4
-
-  for (let e of Object.entries(present.disclosed)) {
-    const [k, v] = e.map(a => a.toString())
-
-    buf.writeUInt8(k.length, offset)
-    offset++
-
-    buf.write(k, offset)
-    offset += k.length
-
-    buf.writeUInt8(v.length, offset)
-    offset++
-
-    buf.write(v, offset)
-    offset += v.length
-  }
-
-  const show = serializeShowing(present.showing, buf, offset)
-  offset += serializeShowing.bytes
-
-  present.sig.encode(buf, offset)
-  offset += present.sig.encode.bytes
-
-  buf.write(present.certId, offset, 'hex')
-  offset += present.certId.byteLength
-
-  encodePresent.bytes = offset - startIndex
-  return buf
-}
-
-function presentEncodingLength (present) {
-  let len = 0
-
-  len += 4
-
-  for (let e of Object.entries(present.disclosed)) {
-    const [k, v] = e.map(a => a.toString())
-
-    len += 2
-    len += k.length
-    len += v.length
-  }
-
-  len += showingEncodingLength(present.showing)
-  len += present.sig.encodingLength()
-  len += 32
-
-  return len
 }
