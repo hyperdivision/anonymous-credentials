@@ -4,7 +4,7 @@ const { Revoker, verify } = require('./revoker')
 const org = new Revoker()
 // console.log('org pk: ', org.getPubkey())
 
-const id = org.issue()
+const id = org.issueIdentifier()
 // console.log('id: ', id)
 
 const show = id.show()
@@ -24,8 +24,8 @@ console.timeEnd('update')
 
 console.time('show')
 const show2 = id.show()
-console.log('second showing:', verify(show2, org.getPubkey()))
 console.timeEnd('show')
+console.log('second showing:', verify(show2, org.getPubkey()))
 
 const revid = org.open(show2)
 const rev = org.revoke(revid)

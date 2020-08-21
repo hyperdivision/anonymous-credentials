@@ -134,7 +134,8 @@ module.exports = class Credential {
     const kLen = buf.readUInt32LE(offset)
     offset += 4
 
-    const cred = new Credential(kLen)
+    // here k[0] is encoded rather than generated, so give (kLen - 1)
+    const cred = new Credential(kLen - 1)
 
     for (let i = 0; i < kLen; i++) {
       cred.k[i] = curve.decodeScalar(buf, offset)

@@ -2,35 +2,38 @@ const assert = require('nanoassert')
 const keys = require('./lib/keygen')
 const sodium = require('sodium-native')
 const RevocationList = require('./revocation-list')
+const { Revoker, Identifier } = require('./experiment/revoker')
 const IssuingProtocol = require('./issuance.js')
 const inspect = Symbol.for('nodejs.util.inspect.custom');
+const curve = require('./lib/curve')
 
 const hasProperty = Object.prototype.hasOwnProperty
 
 class PrivateCertification {
-  constructor (opts) {
+   constructor (opts = {}) {
     this.schema = opts.schema
     this.credentials = opts.credentials || []
     this.certId = opts.certId || null
 
-    this.revocationList = null
+    this.revoker = opts.revoker || new Revoker()
+    // this.revocationList = null
     this.keys = opts.keys || {}
 
-    this.init(opts.storage, opts.oninit)
+    return this.init(opts, opts.oninit)
   }
 
-  init (storage, cb) {
+  init (opts, cb) {
     if (!this.certId) this.certId = shasum(Buffer.from(JSON.stringify(this.schema))).toString('hex')
 
-    this.keys.signing = keys.signingKeys.generate()
-    this.keys.cert = keys.issuingKeys.generate(Object.keys(this.schema).length + 1)
+    this.keys.cert = opts.issuingKeys || keys.issuingKeys.generate(Object.keys(this.schema).length + 1)
     this.keys.pk = {
-      org: this.keys.signing.pk,
+      acc: this.revoker.pubkey,
       credential: this.keys.cert.pk
     }
 
-    this.revocationList = new RevocationList(storage, this.certId)
-    this.revocationList.create(cb)
+    // this.revocationList = new RevocationList(opts.storage, this.certId)
+    // this.revocationList.create(cb)
+    return this
   }
 
   validate (application) {
@@ -45,7 +48,7 @@ class PrivateCertification {
       pk: this.keys.pk,
       schema: this.schema,
       certId: this.certId,
-      revocationListKey: this.revocationList.feed.key
+      revocationListKey: Buffer.alloc(32)
     }
 
     const pubCert = new PublicCertification(publicInfo)
@@ -53,11 +56,11 @@ class PrivateCertification {
   }
 
   addCredential (cred) {
-    this.credentials.push(new Credential(cred))
+    this.credentials.push(new RegisteredCredential(cred))
   }
 
-  genIdentity () {
-    return keys.userIds(this.keys.signing, 256)
+  genIdentifier () {
+    return this.revoker.issueIdentifier()
   }
 
   issue (details) {
@@ -69,14 +72,24 @@ class PrivateCertification {
     return issuance
   }
 
-  revoke (revokeKey, cb) {
-    const revokeRoot = this.credentials.map(c => c.root).find(keys.findRoot(revokeKey, 256))
+  revoke (witness, cb) {
+    const revokeUser = this.revoker.open(witness)
 
-    if (this.credentials.find(cred => cred.root === revokeRoot) === undefined) {
-      throw new Error('credential does not belong to this certificate')
-    }
+    // if (this.credentials.find(cred => curve.G1.eq(cred.identifier.w.c, revokeUser)) === undefined) {
+    //   throw new Error('credential does not belong to this certificate')
+    // }
 
-    this.revocationList.add(revokeRoot, cb)
+    console.log(revokeUser, '-------------------------------------------------------------')
+    this.revoker.revoke(revokeUser)
+    // this.revocationList.add({
+    //   newValue: this.revoker.acc.current,
+    //   revoked: revokeUser
+    // }, cb)
+
+    return cb({
+      newValue: this.revoker.acc.current,
+      revoked: revokeUser
+    })
   }
 
   encode (buf, offset) {
@@ -95,8 +108,8 @@ class PrivateCertification {
     buf.set(this.certId, offset)
     offset += 32
 
-    keys.signingKeys.encode(this.keys.sigining, buf, offset)
-    offset += keys.signingKeys.encode.bytes
+    this.revoker.encode(buf, offset)
+    offset += this.revoker.encode.bytes
 
     keys.issuingKeys.encode(this.keys.cert, buf, offset)
     offset += keys.issuingKeys.encode.bytes
@@ -117,7 +130,7 @@ class PrivateCertification {
 
     for (let cred of this.credentials) len += cred.encodingLength()
     len += 32
-    len += keys.signingKeysEncodingLength()
+    len += this.revoker.encodingLength()
     len += keys.issuingKeysEncodingLength(this.keys.cert)
     len += 4
     len += Buffer.from(JSON.stringify(this.schema)).byteLength
@@ -137,17 +150,17 @@ class PrivateCertification {
 
     opts.credentials = []
     for (let i = 0; i < credentialsLen; i++) {
-      opts.credentials.push(Credential.decode(buf, offset))
-      offset += Credential.decode.bytes
+      opts.credentials.push(RegisteredCredential.decode(buf, offset))
+      offset += RegisteredCredential.decode.bytes
     }
 
     opts.certId = buf.subarray(offset, offset + 32)
     offset += 32
 
-    opts.keys.signing = keys.signingKeys.decode(buf, offset)
-    offset += keys.signingKeys.decode.bytes
+    opts.revoker = Revoker.decode(buf, offset)
+    offset += Revoker.decode.bytes
 
-    opts.keys.cert = keys.issuingKeys.decode(buf, offset)
+    opts.issuingKeys = keys.issuingKeys.decode(buf, offset)
     offset += keys.issuingKeys.decode.bytes
 
     const schemaLen = buf.readUInt32LE(offset)
@@ -238,26 +251,26 @@ class PublicCertification {
   }
 }
 
-class Credential {
+class RegisteredCredential {
   constructor (opts) {
     this.attr = opts.attr
-    this.root = opts.root
+    this.identifier = opts.identifier
   }
 
   encode (buf, offset) {
-    const encodedAttr = Buffer.from(JSON.stringify(this.attr))
-    if (!buf) buf = Buffer.alloc(36 + encodedAttr.byteLength)
+    if (!buf) buf = Buffer.alloc(this.encodingLength())
     if (!offset) offset = 0
     const startIndex = offset
 
+    const encodedAttr = Buffer.from(JSON.stringify(this.attr))
     buf.writeUInt32LE(encodedAttr.byteLength, offset)
     offset += 4
 
     buf.set(encodedAttr, offset)
     offset += encodedAttr.byteLength
 
-    buf.set(root)
-    offset += 32
+    this.identifier.encode(buf, offset)
+    offset += this.identifier.encode.bytes
 
     this.encode.bytes = offset - startIndex
     return buf
@@ -266,7 +279,7 @@ class Credential {
   encodingLength () {
     let len = 4
     len += Buffer.from(JSON.stringify(this.attr)).byteLength
-    len += 32
+    len += this.identifier.encodingLength()
 
     return len
   }
@@ -283,10 +296,10 @@ class Credential {
     opts.attr = JSON.parse(buf.subarray(offset, offset + attrLen).toString())
     offset += attrLen
 
-    opts.root = buf.subarray(offset, offset + 32)
-    offset += 32
+    opts.identifier = Identifier.decode(buf, offset)
+    offset += Identifier.decode.bytes
 
-    Credential.decode.bytes = offset - startIndex
+    RegisteredCredential.decode.bytes = offset - startIndex
     return new Credential(opts)
   }
 }

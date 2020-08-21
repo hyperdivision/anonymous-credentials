@@ -3,6 +3,7 @@ const sodium = require('sodium-native')
 const keygen = require('./lib/keygen')
 const Credential = require('./credential')
 const { Presentation, Signature } = require('./wire')
+const { Identifier } = require('./experiment/revoker')
 const attributes = require('./lib/gen-attributes')
 
 module.exports = class Identity {
@@ -13,8 +14,8 @@ module.exports = class Identity {
     this.certId = certId
   }
 
-  finalize ({ identity, info }) {
-    this.pseudonym = new Pseudonym(identity)
+  finalize ({ identity, info, pk }) {
+    this.pseudonym = new Identifier(identity, pk)
     this.credential.finalize(info)
   }
 
@@ -29,9 +30,9 @@ module.exports = class Identity {
     const showing = this.credential.show(encoded)
     const toSign = showing.encode()
 
-    const sig = this.pseudonym.sign(Buffer.from(toSign, 'hex'))
+    const witness = this.pseudonym.show()
 
-    return new Presentation(disclosed, showing, sig, this.certId)
+    return new Presentation(disclosed, showing, witness, this.certId)
   }
 
   encode (buf, offset) {
@@ -89,8 +90,8 @@ module.exports = class Identity {
     id.credential = Credential.decode(buf, offset)
     offset += Credential.decode.bytes
 
-    id.pseudonym = Pseudonym.decode(buf, offset)
-    offset += Pseudonym.decode.bytes
+    id.pseudonym = Identifier.decode(buf, offset)
+    offset += Identifier.decode.bytes
 
     Identity.decode.bytes = offset - startIndex
     return id

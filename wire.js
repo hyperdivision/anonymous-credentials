@@ -1,7 +1,6 @@
 const sodium = require('sodium-native')
 const schnorr = require('./lib/schnorr-proof')
 const curve = require('./lib/curve')
-const keys = require('./lib/keygen')
 
 var SetupMessage = module.exports.SetupMessage = class SetupMessage {
   constructor (tag, setup) {
@@ -127,11 +126,107 @@ var StoreMessage = module.exports.StoreMessage = class StoreMessage {
     msg.info = IssuanceResponse.decode(buf, offset)
     offset += IssuanceResponse.decode.bytes
 
-    msg.identity = keys.decodeUserIds(buf, offset)
-    offset += keys.decodeUserIds.bytes
+    msg.identity = {}
+    msg.identity.y = curve.decodeScalar(buf, offset)
+    offset += curve.decodeScalar.bytes
+
+    msg.identity.witness = {}
+    msg.identity.witness.c = curve.decodeG1(buf, offset)
+    offset += curve.decodeG1.bytes
+
+    msg.identity.witness.d = curve.decodeScalar(buf, offset)
+    offset += curve.decodeScalar.bytes
+
+    msg.pk = AccumulatorPublicKey.decode(buf, offset)
+    offset += AccumulatorPublicKey.decode.bytes
+    console.log(msg.identity)
 
     StoreMessage.decode.bytes = offset - startIndex
     return msg
+  }
+}
+
+const AccumulatorPublicKey = module.exports.AccumulatorPublicKey = class AccumulatorPublicKey {
+  constructor (opts = {}) {
+    this.g1 = opts.g1
+    this.u = opts.u || curve.randomPointG1()
+    this.h = opts.h || curve.G1.mulScalar(this.u, opts.secrets.xi1)
+    this.v = opts.v || curve.G1.mulScalar(this.h, curve.F.inv(opts.secrets.xi2))
+
+    this.g2 = opts.g2
+    this.a = opts.a || curve.G2.mulScalar(this.g2, opts.secrets.alpha)
+
+    this.currentAccumulator = opts.current
+
+    this.e = {}
+    this.e.gg = curve.pairing(this.g1, this.g2)
+    this.e.vg = curve.pairing(this.currentAccumulator, this.g2)
+    this.e.hg = curve.pairing(this.h, this.g2)
+    this.e.ha = curve.pairing(this.h, this.a)
+  }
+
+  encode (buf, offset) {
+    if (!buf) buf = Buffer.alloc(this.encodingLength())
+    if (!offset) offset = 0
+    const startIndex = offset
+
+    curve.encodeG1(this.g1, buf, offset)
+    offset += curve.encodeG1.bytes
+
+    curve.encodeG1(this.u, buf, offset)
+    offset += curve.encodeG1.bytes
+
+    curve.encodeG1(this.v, buf, offset)
+    offset += curve.encodeG1.bytes
+
+    curve.encodeG1(this.h, buf, offset)
+    offset += curve.encodeG1.bytes
+
+    curve.encodeG1(this.currentAccumulator, buf, offset)
+    offset += curve.encodeG1.bytes
+
+    curve.encodeG2(this.g2, buf, offset)
+    offset += curve.encodeG2.bytes
+
+    curve.encodeG2(this.a, buf, offset)
+    offset += curve.encodeG2.bytes
+
+    this.encode.bytes = offset - startIndex
+    return buf
+  }
+
+  encodingLength () {
+    return 864
+  }
+
+  static decode (buf, offset) {
+    if (!offset) offset = 0
+    const startIndex = offset
+
+    const opts = {}
+    opts.g1 = curve.decodeG1(buf, offset)
+    offset += curve.decodeG1.bytes
+
+    opts.u = curve.decodeG1(buf, offset)
+    offset += curve.decodeG1.bytes
+
+    opts.v = curve.decodeG1(buf, offset)
+    offset += curve.decodeG1.bytes
+
+    opts.h = curve.decodeG1(buf, offset)
+    offset += curve.decodeG1.bytes
+
+    opts.current = curve.decodeG1(buf, offset)
+    offset += curve.decodeG1.bytes
+
+    opts.g2 = curve.decodeG2(buf, offset)
+    offset += curve.decodeG2.bytes
+
+    opts.a = curve.decodeG2(buf, offset)
+    offset += curve.decodeG2.bytes
+
+    AccumulatorPublicKey.decode.bytes = offset - startIndex
+    return new AccumulatorPublicKey(opts)
   }
 }
 
@@ -318,11 +413,68 @@ var IssuanceResponse = module.exports.IssuanceResponse = class IssuanceResponse 
   }
 }
 
+const WitnessProof = module.exports.WitnessProof = class WitnessProof {
+  constructor ({ T, challenge, cBlinds }) {
+    this.T = T || []
+    this.challenge = challenge || null
+    this.cBlinds = cBlinds || []
+  }
+
+  encode (buf, offset) {
+    if (!buf) buf = Buffer.alloc(this.encodingLength())
+    if (!offset) offset = 0
+    const startIndex = offset
+
+    for (let i = 0; i < this.T.length; i++) {
+      curve.encodeG1(this.T[i], buf, offset)
+      offset += curve.encodeG1.bytes
+    }
+
+    curve.encodeScalar(this.challenge, buf, offset)
+    offset += curve.encodeScalar.bytes
+
+    for (let i = 0; i < this.cBlinds.length; i++) {
+      curve.encodeScalar(this.cBlinds[i], buf, offset)
+      offset += curve.encodeScalar.bytes
+    }
+
+    this.encode.bytes = offset - startIndex
+    return buf
+  }
+
+  encodingLength () {
+    return 832
+  }
+
+  static decode (buf, offset) {
+    if (!offset) offset = 0
+    const startIndex = offset
+
+    const T = []
+    for (let i = 0; i < 6; i++) {
+      T.push(curve.decodeG1(buf, offset))
+      offset += curve.decodeG1.bytes
+    }
+
+    const challenge = curve.decodeScalar(buf, offset)
+    offset += curve.decodeScalar.bytes
+
+    const cBlinds = []
+    for (let i = 0; i < 7; i++) {
+      cBlinds.push(curve.decodeScalar(buf, offset))
+      offset += curve.decodeScalar.bytes
+    }
+
+    WitnessProof.decode.bytes = offset - startIndex
+    return new WitnessProof({ T, challenge, cBlinds })
+  }
+}
+
 var Presentation = module.exports.Presentation = class Presentation {
-  constructor (disclosed, showing, sig, certId) {
+  constructor (disclosed, showing, witness, certId) {
     this.disclosed = disclosed
     this.showing = showing
-    this.sig = sig
+    this.witness = witness
     this.certId = certId
   }
 
@@ -353,8 +505,8 @@ var Presentation = module.exports.Presentation = class Presentation {
     const show = this.showing.encode(buf, offset)
     offset += this.showing.encode.bytes
 
-    this.sig.encode(buf, offset)
-    offset += this.sig.encode.bytes
+    this.witness.encode(buf, offset)
+    offset += this.witness.encode.bytes
 
     buf.write(this.certId, offset, 'hex')
     offset += this.certId.byteLength
@@ -392,8 +544,8 @@ var Presentation = module.exports.Presentation = class Presentation {
     p.showing = Showing.decode(buf, offset)
     offset += Showing.decode.bytes
 
-    p.sig = Signature.decode(buf, offset)
-    offset += Signature.decode.bytes
+    p.witness = WitnessProof.decode(buf, offset)
+    offset += WitnessProof.decode.bytes
 
     p.certId = buf.subarray(offset, offset + 32).toString('hex')
     offset += 32
@@ -416,7 +568,9 @@ var Presentation = module.exports.Presentation = class Presentation {
     }
 
     len += this.showing.encodingLength()
-    len += this.sig.encodingLength()
+    console.log(len)
+    len += this.witness.encodingLength()
+    console.log(len)
     len += 32
 
     return len    

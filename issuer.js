@@ -33,11 +33,11 @@ module.exports = class Issuer {
     const info = issuance.response(res.details)
 
     // assertion will throw on bad input before we execute following code
-    const identity = cert.genIdentity()
+    const identity = cert.genIdentifier()
 
     cert.addCredential({
       attr: issuance.attr,
-      root: identity.root
+      identifier: identity
     })
 
     const finalizeMessage = new StoreMessage(res.tag, info, identity)
@@ -48,16 +48,15 @@ module.exports = class Issuer {
     const certification = new PrivateCertification({
       schema,
       storage: this._storage,
-      oninit: () => {
-        this.certifications[certification.certId] = certification
-        cb(certification.certId)
-      }
     })
+  
+    this.certifications[certification.certId] = certification
+    cb(certification.certId)
   }
 
   revokeCredential (identifier, cb) {
     const cert = this.certifications[identifier.certId]
-    cert.revoke(identifier.pk, cb)
+    cert.revoke(identifier.witness, cb)
   }
 
   getPublicCert (certId) {
