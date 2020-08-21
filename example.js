@@ -43,8 +43,8 @@ org.addCertification(schema, function (certId) {
     // user stores the credential
     user.store(granted)
 
-    const buf = user.serialize()
-    const sameUser = User.parse(buf)
+    const buf = user.encode()
+    const sameUser = User.decode(buf)
 
     // user selects which attributes to show
     const present = sameUser.present(['age', 'drivers licence'])

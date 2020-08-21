@@ -2,6 +2,7 @@ const assert = require('nanoassert')
 const curve = require('./lib/curve')
 const schnorr = require('./lib/schnorr-proof')
 const attributes = require('./lib/gen-attributes')
+const { IssuanceSetup, IssuanceResponse } = require('./wire')
 
 const rand = curve.randomScalar
 const G1 = curve.G1
@@ -14,15 +15,10 @@ function IssuingProtocol (keys, attr) {
   const K_ = curve.randomPointG1()
   const S_ = G1.mulScalar(K_, keys.sk.a)
   const S0_ = G1.mulScalar(K_, keys.sk._a[0])
+
   const k = attr.map(a => a.toString()).map(attributes.encode)
 
-  const setup = {
-    k,
-    S_,
-    K_,
-    S0_
-  }
-
+  const setup = new IssuanceSetup(k, K_, S_, S0_)
   const response = respond(keys, k, S_)
 
   return {
@@ -56,43 +52,6 @@ function respond (keys, attr, S_) {
 
     const T = G1.mulScalar(C, keys.sk.z)
 
-    function encode (buf, offset) {
-      if (!buf) buf = Buffer.alloc(encodingLength())
-      if (!offset) offset = 0
-      const startIndex = offset
-
-      curve.encodeScalar(kappa, buf, offset)
-      offset += curve.encodeScalar.bytes
-
-      curve.encodeG1(K, buf, offset)
-      offset += curve.encodeG1.bytes
-
-      buf.writeUInt32LE(_S.length, offset)
-      offset += 4
-
-      for (let el of _S) {
-        curve.encodeG1(el, buf, offset)
-        offset += curve.encodeG1.bytes
-      }
-
-      curve.encodeG1(T, buf, offset)
-      offset += curve.encodeG1.bytes
-
-      encode.bytes = offset - startIndex
-      return buf
-    }
-
-    function encodingLength () {
-      return 36 + 96 * (_S.length + 2)
-    }
-
-    return {
-      kappa,
-      K,
-      _S,
-      T,
-      encode,
-      encodingLength
-    }
+    return new IssuanceResponse(kappa, K, _S, T)
   }
 }

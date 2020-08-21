@@ -1,11 +1,12 @@
 const schnorr = require('./lib/schnorr-proof')
 const curve = require('./lib/curve')
+const { ObtainInfo, Showing } = require('./wire')
 
 const G1 = curve.G1
 const F = curve.F
 const rand = curve.randomScalar
 
-class Credential {
+module.exports = class Credential {
   constructor (length) {
     this.k = new Array(length + 1)
     this.kappa = null
@@ -33,12 +34,7 @@ class Credential {
     const prover = schnorr.prover([this.S, this._S[0]])
     var proof = prover.genProof([this.kappa, this.k[0]])
 
-    return {
-      S: this.S,
-      S0: this._S[0],
-      R,
-      proof
-    }
+    return new ObtainInfo(this.S, this._S[0], R, proof)
   }
 
   finalize (final) {
@@ -84,17 +80,10 @@ class Credential {
     const prover = schnorr.prover([dBlindC, blindS, ...undisclosed.S])
     const proof = prover.genProof([beta, this.kappa, ...undisclosed.k])
 
-    return {
-      K_: blindK,
-      S_: blindS,
-      _S: blindedS_,
-      C_: dBlindC,
-      T_: dBlindT,
-      proof
-    }
+    return new Showing(blindK, blindS, blindedS_, dBlindC, dBlindT, proof)
   }
 
-  serialize (buf, offset) {
+  encode (buf, offset) {
     if (!buf) buf = Buffer.alloc(this.encodingLength())
     if (!offset) offset = 0
     const startIndex = offset
@@ -124,7 +113,7 @@ class Credential {
     curve.encodeG1(this.T, buf, offset)
     offset += curve.encodeG1.bytes
 
-    this.serialize.bytes = offset - startIndex
+    this.encode.bytes = offset - startIndex
     return buf
   }
 
@@ -138,7 +127,7 @@ class Credential {
     return len
   }
 
-  static parse (buf, offset) {
+  static decode (buf, offset) {
     if (!offset) offset = 0
     const startIndex = offset
 
@@ -171,7 +160,7 @@ class Credential {
 
     cred.C = cred._S.reduce(accumulator, mulAdd(cred.K, cred.S, cred.kappa))
 
-    Credential.parse.bytes = offset - startIndex
+    Credential.decode.bytes = offset - startIndex
     return cred
 
     function accumulator (a, e, i) {
@@ -186,140 +175,4 @@ function mulAdd (sum, element, scalar) {
 
 function findIndexIn (arr) {
   return attr => arr.findIndex(a => curve.F.eq(a, attr))
-}
-
-function serializeObtain (transcript, buf, offset) {
-  if (!buf) buf = Buffer.alloc(obtainEncodingLength(transcript))
-  if (!offset) offset = 0
-  var startIndex = offset
-
-  curve.encodeG1(transcript.S, buf, offset)
-  offset += curve.encodeG1.bytes
-
-  curve.encodeG1(transcript.S0, buf, offset)
-  offset += curve.encodeG1.bytes
-
-  curve.encodeG1(transcript.R, buf, offset)
-  offset += curve.encodeG1.bytes
-
-  schnorr.serialize(transcript.proof, buf, offset)
-  offset += schnorr.serialize.bytes
-
-  serializeObtain.bytes = offset - startIndex
-  return buf
-}
-
-function parseObtain (buf, offset) {
-  if (!buf) buf = Buffer.alloc(obtainEncodingLength(transcript))
-  if (!offset) offset = 0
-  var startIndex = offset
-  
-  const transcript = {}
-  transcript.S = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  transcript.S0 = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  transcript.R = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  transcript.proof = schnorr.parse(buf, offset)
-  offset += schnorr.serialize.bytes
-
-  serializeObtain.bytes = offset - startIndex
-  return transcript
-}
-
-function obtainEncodingLength (transcript) {
-  let len = 0
-
-  len += 96 * 3
-  len += schnorr.encodingLength(transcript.proof)
-
-  return len
-}
-
-function serializeShowing (showing, buf, offset) {
-  if (!buf) buf = Buffer.alloc(showingEncodingLength(showing))
-  if (!offset) offset = 0
-  const startIndex = offset
-
-  curve.encodeG1(showing.K_, buf, offset)
-  offset += curve.encodeG1.bytes
-
-  curve.encodeG1(showing.S_, buf, offset)
-  offset += curve.encodeG1.bytes
-
-  buf.writeUInt32LE(showing._S.length, offset)
-  offset += 4
-
-  for (let k of showing._S) {
-    curve.encodeG1(k, buf, offset)
-    offset += curve.encodeG1.bytes
-  }
-
-  curve.encodeG1(showing.C_, buf, offset)
-  offset += curve.encodeG1.bytes
-
-  curve.encodeG1(showing.T_, buf, offset)
-  offset += curve.encodeG1.bytes
-
-  schnorr.serialize(showing.proof, buf, offset)
-  offset += schnorr.serialize.bytes
-
-  serializeShowing.bytes = offset - startIndex
-  return buf
-}
-
-function parseShowing (buf, offset) {
-  if (!offset) offset = 0
-  const startIndex = offset
-
-  const showing = {}
-  showing.K_ = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  showing.S_ = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  sLen = buf.readUInt32LE(offset)
-  offset += 4
-
-  showing._S = []
-  for (let i = 0; i < sLen; i++) {
-    showing._S.push(curve.decodeG1(buf, offset))
-    offset += curve.decodeG1.bytes
-  }
-
-  showing.C_ = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  showing.T_ = curve.decodeG1(buf, offset)
-  offset += curve.decodeG1.bytes
-
-  showing.proof = schnorr.parse(buf, offset)
-  offset += schnorr.parse.bytes
-
-  parseShowing.bytes = offset - startIndex
-  return showing
-}
-
-function showingEncodingLength (showing) {
-  let len = 4
-
-  len += 96 * (showing._S.length + 4)
-  len += schnorr.encodingLength(showing.proof)
-
-  return len 
-}
-
-module.exports = {
-  Credential,
-  serializeObtain,
-  parseObtain,
-  obtainEncodingLength,
-  serializeShowing,
-  parseShowing,
-  showingEncodingLength
 }
