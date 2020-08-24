@@ -217,7 +217,15 @@ may be accessed by `issuer.certifications[certId]`.
 
 #### `const certInfo = org.getPublicCert(certId)`
 
-Get the public keys and revocation list informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. `certInfo` is returned as a `buffer` containing the serialized information to be passed to a verifier.
+Get the public keys and revocation list information associated with a given
+`certId`. This info is passed to a verifier for them to recognise
+new certifications. `certInfo` is returned as a `buffer` containing the
+serialized information to be passed to a verifier.
+
+### `for (const [certId, certInfo] of org.getPublicCerts())`
+
+Iterate over all public certifications as a list of pairs of `certId` and
+`certInfo`. See the above method for the encoding.
 
 #### `org.beginIssuance(application)`
 

@@ -65,4 +65,10 @@ module.exports = class Issuer {
   getPublicCert (certId) {
     return this.certifications[certId].toPublicCertificate()
   }
+
+  * getPublicCerts () {
+    for (var key of Object.keys(this.certifications)) {
+      yield [key, this.certifications[key]]
+    }
+  }
 }
