@@ -40,6 +40,8 @@ satisfying the attributes required by the verifier.
 ```js
 const issuer = new Issuer('./some-storage-path')
 
+// First the issuer must define their certifications.
+// In this case we only define a single schema
 const schema = {
   "age": "number",
   "nationality": "string",
@@ -49,10 +51,14 @@ const schema = {
   "gender": "string"
 }
 
-issuer.addCertification(schema, (certId) => {
-  // do something with certId, e.g list online
+// Now the issuer adds this certification to their list
+issuer.addCertification(schema, (err, certId) => {
+  if (err) throw err
 
-  // answer a verifier's request for this certification
+  // CertId can now be listed along with the accepted schema
+
+  // Later a a verifier or user may request the definition for
+  // this certification
   const certInfo = issuer.getCertInfo(certId)
 })
 ```
@@ -61,23 +67,29 @@ Now the issuer is ready to grant credentials from the certification.
 
 ### Verifier
 
-A new verifier must first add the certifications it is willing to accept. They may request the necessary info associated with `certId` from the issuer
+A new verifier must first add the certifications it is willing to accept.
+They may request the necessary info associated with `certId` from the issuer
 
 ```js
 const verifier = new Verifier('./some-other-storage')
 
+// Verifier adds a certification they accept.
+// This info could be hardcoded or come from reading something external
 verifier.registerCertification(certInfo, () => {
-  // verifier online
+  // verifier is now ready to check credentials
 })
 ```
 
 ### User
 
-The user should have obtained `certId` from a public list. Now they may send an application for a credential:
+The user should have obtained `certId` from a public issuer list. Now they can
+apply for a certificate from an issuer:
 
 ```js
 const user = new User()
 
+// This information is based on the schema from the issuer
+// How the issuer verifies the authenticity of this is up to them, eg. KYC
 const application = {
   "age": 66,
   "nationality": "italy",
@@ -87,37 +99,51 @@ const application = {
   "gender": "male"
 }
 
- /* --- Client Side --- */
+/* --- Client Side --- */
 
+// User creates an application payload
 const app = user.apply(application, certId)
 
-(app, { metadata }) --> server // metadata should be proof of ID
+// User sends application to issuer somehow, eg over the network
+// metadata can be any required proof the issuer requires to check the
+// authenticity of the information in the application
+(app, { metadata }) --> server
 
- /* --- Server Side --- */
+/* --- Server Side --- */
+
+// Issuer receives a new application
 (app) => {
+  // here we skip any queuing or checking of metadata and just start the
+  // issuance protocol right away
   const issuanceInit = issuer.addIssuance(app)
 }
 
+// We must now send the issuanceInit response back to the user
 (issuanceInit) --> client
 
- /* --- Client Side --- */
+/* --- Client Side --- */
 
+// User must now perform some computation on the issuanceInit response and
+// send back the issuanceResponse to the issuer
 (issuanceInit) => {
   const issuanceResponse = user.obtain(issuanceInit)
 }
 
 (issuanceResponse) --> server
 
- /* --- Server Side --- */
+/* --- Server Side --- */
 
+// The issuer can now finalise the certificate and send it back to the user
 (issuanceResponse) => {
   const final = issuer.grantCredential(issuanceResponse)
 }
 
 (final) --> client
 
- /* --- Client Side --- */
+/* --- Client Side --- */
 
+// The user must now store the certficiate so it can be used to generate future
+// credentials
 (final) => {
   user.store(final)
 }
@@ -126,29 +152,39 @@ const app = user.apply(application, certId)
 Now the user has a credential, which they may present to a verifier:
 
 ```js
- /* --- Client Side --- */
+/* --- Client Side --- */
 
+// The verifier has somehow communicated to the user that they require a
+// certificate from our issuer above and require the user to prove their
+// age and nationality
 const transcript = user.present(['age', 'nationality'])
 
 (transcript) --> verifier
 
- /* --- Server Side --- */
+/* --- Server Side --- */
 
+// The verifier can check the transcript and will get a unique identifier back
+// from the credential. The transcript and identifier can be stored in a
+// database for future association and in case a user needs to be reported to
+// the issuer for revocation
 verifier.validate(transcript, (err, identifier) => {
   if (err) {
     // handle reject user
   }
 
-  // identifier should be associated with this user
-  // as it is needed to report malicious parties
+
 })
 ```
 
-If a malicious user is detected, the `transcript` associated with their credential may be reported to the issuer and, if appropriate, the issuer may revoke the entire credential:
+If a malicious user is detected, the `transcript` associated with their
+credential may be reported to the issuer and, if appropriate, the issuer may
+revoke the entire credential:
 
 ```js
 /* --- Verifier --- */
 
+// Incident report here is whatever the issuer requires to process a revocation
+// request. This could be evidence of malice
 (identifier, { incidentReport }) --> issuer
 
 /* --- Issuer --- */
