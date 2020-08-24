@@ -201,32 +201,35 @@ revoke the entire credential:
 
 ### Issuer
 
-#### const org = new Issuer(storage)
+#### `const org = new Issuer(storage)`
 
-Instatiate a new Issuer instance. `storage` designates the path which shall be used to store revocation list information.
+Instatiate a new Issuer instance. `storage` designates the path which shall be
+used to store revocation list information.
 
-#### org.addIssuance(application)
+#### `org.addCertification(schema, cb(err, certId))`
 
-Begin a new issuance protocol. This method takes a user's `application`, which is the output of `user.apply` and outputs a `setup` object, encoding blinded curve points that are used to generate the credential, which may be passed straight to the user.
+Register a new certification. Takes a JSON `schema` specifying field titles and
+types and returns the resulting certification's `certId`,  a unique identifier
+string, to the callback provided.
 
-#### org.grantCredential(res)
+The certification is stored in `issuer.certifications` under it's `certId` and
+may be accessed by `issuer.certifications[certId]`.
 
-This is the Issuer's final step during issuance and takes the output of `user.obtain`. In this step the Issuer contributes entropy towards the users credential and seals the credential by exponentiating the product of all curve points in the credential by the Issuer's secret key. This term is used in a bilinear pairing equality to verify the sum of exponents during verification of the credential.
-
-#### async org.revokeCredential(identifier, cb())
-
-Revoke a credential associated with a given `identifier`. This method shall publish the root id associated with this key to the certifications revocation list, anyone subscribed to the revocation list may then derive all keys associated with the root id and checks against these keys during verification.
-
-#### async org.addCertification(schema, cb(certId))
-
-Register a new certification. Takes a JSON `schema` specifying field titles and types and returns the resulting ertification's `certId`,  a unique identifier string, to the callback provided.
-
-The certification is stored in `issuer.certifications` under it's `certId` and may be accessed by `issuer.certifications[certId]`.
-
-#### const certInfo = org.getPublicCert(certId)
+#### `const certInfo = org.getPublicCert(certId)`
 
 Get the public keys and revocation list informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. `certInfo` is returned as a `buffer` containing the serialized information to be passed to a verifier.
 
+#### `org.addIssuance(application)`
+
+Begin a new issuance protocol. This method takes a user's `application`, which is the output of `user.apply` and outputs a `setup` object, encoding blinded curve points that are used to generate the credential, which may be passed straight to the user.
+
+#### `org.grantCredential(res)`
+
+This is the Issuer's final step during issuance and takes the output of `user.obtain`. In this step the Issuer contributes entropy towards the users credential and seals the credential by exponentiating the product of all curve points in the credential by the Issuer's secret key. This term is used in a bilinear pairing equality to verify the sum of exponents during verification of the credential.
+
+#### `org.revokeCredential(identifier, cb(err))`
+
+Revoke a credential associated with a given `identifier`. This method shall publish the root id associated with this key to the certifications revocation list, anyone subscribed to the revocation list may then derive all keys associated with the root id and checks against these keys during verification.
 
 ### User
 
@@ -267,16 +270,15 @@ Access an identity containing the attributes listed in `required`. Takes an `arr
 
 Instantiate a new Verifier. `storage` should be a path designated where revocation list data shall be stored.
 
+#### async verifier.registerCertification(cert, cb())
+
+Recognise a new certification. `cert` is a `buffer` as outputted of `org.getCertInfo(certId)`, containing the serialization of the certification public keys and the information needed to sync the `revocation list` associated with the certification.
+
 #### async verifier.validate(transcript, cb(err, identifier))
 
 Validate a given `transcript`, which is the `buffer` returned by `user.present`. `cb` should have the signature `cb(err)` . An error message shall be passed to `cb` if validation fails.
 
 `identifier` is needed when reporting bad users to the issuing party, therefore it should be associated with that user account.
-
-#### async verifier.registerCertification(cert, cb())
-
-Recognise a new certification. `cert` is a `buffer` as outputted of `org.getCertInfo(certId)`, containing the serialization of the certification public keys and the information needed to sync the `revocation list` associated with the certification.
-
 
 ## How it works
 

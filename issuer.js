@@ -50,7 +50,7 @@ module.exports = class Issuer {
       storage: this._storage,
       oninit: () => {
         this.certifications[certification.certId] = certification
-        cb(certification.certId)
+        cb(null, certification.certId)
       }
     })
   }
