@@ -4,6 +4,28 @@ Anonymous credential scheme based on https://eprint.iacr.org/2017/115.pdf
 
 ## Usage
 
+In an anonymous credential system you have three actors; issuers that
+acts as a trust anchor and issues credentials, verifiers who check credentials
+as part of registration or authentication, and users who posses credentials.
+
+First an issuer must create their certifications based on a "schema". They can
+then publish which certifications they provide, so verifies and users can choose
+which they want to accept and apply for, respectively.
+
+Verifiers can then start offering their services, guarded by a valid
+credential under a given certification. The difference between a certificate and
+credential is that the credential can require a subset of the attributes given
+by a certificate. Credentials are also unlinkable, meaning that a certificate
+can be used to create multiple credentials, without revealing that they all came
+from the same certificate.
+
+Users can now apply for a certificate from an issuer, and after successful
+application, can start using their certificate with verifiers.
+
+Verifiers must make public which certifications they accept, and which
+attributes from a given certification must be proven. Users can fetch this, and
+create a new credentail to show to the verifier.
+
 ### Issuer
 ```js
 const issuer = new Issuer('./some-storage-path')
@@ -115,11 +137,11 @@ verifier.validate(transcript, (err, identifier) => {
 If a malicious user is detected, the `transcript` associated with their credential may be reported to the issuer and, if appropriate, the issuer may revoke the entire credential:
 
 ```js
-/* --- Verifier --- */ 
+/* --- Verifier --- */
 
 (identifier, { incidentReport }) --> issuer
 
-/* --- Issuer --- */ 
+/* --- Issuer --- */
 
 // check incidentReport, if user is at fault:
 (identifier) => {
