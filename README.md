@@ -5,26 +5,36 @@ Anonymous credential scheme based on https://eprint.iacr.org/2017/115.pdf
 ## Usage
 
 In an anonymous credential system you have three actors; issuers that
-acts as a trust anchor and issues credentials, verifiers who check credentials
-as part of registration or authentication, and users who posses credentials.
+acts as a trust anchor and issue certificates, verifiers who check credentials
+as part of registration or authentication, and users who posses certificates.
+
+Certificates are akin to SSL certificates, but also very different. An issuer
+verifies the information that goes into the certificate out of band, eg checking
+public registers, notarized documents etc. It will then issue a certificate to
+the user, which the user in turn can create credentials from. Credentials prove
+a subset of the attributes contained in the certificate, but in a zero knowledge
+manner. From a certificate, infinite credentials can be made, and they are
+unlinkable, meaning two credentials cannot be traced back to the same
+certificate, except if one gets revoked. A credential can be made from a
+certificate without contacting the issuer, making them ideal as an trust
+mechanism in distributed systems.
+
+A fresh system is initialised as follows:
 
 First an issuer must create their certifications based on a "schema". They can
-then publish which certifications they provide, so verifies and users can choose
-which they want to accept and apply for, respectively.
+then publish which certifications they provide, so verifiers and users can
+choose which they want to accept and apply for, respectively.
 
 Verifiers can then start offering their services, guarded by a valid
-credential under a given certification. The difference between a certificate and
-credential is that the credential can require a subset of the attributes given
-by a certificate. Credentials are also unlinkable, meaning that a certificate
-can be used to create multiple credentials, without revealing that they all came
-from the same certificate.
+credential under a given certification.
 
 Users can now apply for a certificate from an issuer, and after successful
-application, can start using their certificate with verifiers.
+application, can start using their certificate.
 
 Verifiers must make public which certifications they accept, and which
 attributes from a given certification must be proven. Users can fetch this, and
-create a new credentail to show to the verifier.
+create a new credential to show the verifier they possess a certificate
+satisfying the attributes required by the verifier.
 
 ### Issuer
 ```js
