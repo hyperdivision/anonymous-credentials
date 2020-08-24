@@ -7,13 +7,15 @@ const { PrivateCertification } = require('./certification')
 
 module.exports = class Issuer {
   constructor (storage) {
+    assert(typeof storage === 'string', 'storage must be string')
     this.certifications = {}
     this.issuances = []
     this._storage = storage
   }
 
-  addIssuance (buf) {
-    const application = Application.decode(buf)
+  beginIssuance (app) {
+    assert(Buffer.isBuffer(app), 'application must be buffer')
+    const application = Application.decode(app)
 
     const cert = this.certifications[application.certId]
 

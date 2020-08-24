@@ -102,7 +102,7 @@ const application = {
 /* --- Client Side --- */
 
 // User creates an application payload
-const app = user.apply(application, certId)
+const app = user.createApplication(application, certId)
 
 // User sends application to issuer somehow, eg over the network
 // metadata can be any required proof the issuer requires to check the
@@ -115,7 +115,7 @@ const app = user.apply(application, certId)
 (app) => {
   // here we skip any queuing or checking of metadata and just start the
   // issuance protocol right away
-  const issuanceInit = issuer.addIssuance(app)
+  const issuanceInit = issuer.beginIssuance(app)
 }
 
 // We must now send the issuanceInit response back to the user
@@ -219,7 +219,7 @@ may be accessed by `issuer.certifications[certId]`.
 
 Get the public keys and revocation list informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. `certInfo` is returned as a `buffer` containing the serialized information to be passed to a verifier.
 
-#### `org.addIssuance(application)`
+#### `org.beginIssuance(application)`
 
 Begin a new issuance protocol. This method takes a user's `application`, which is the output of `user.apply` and outputs a `setup` object, encoding blinded curve points that are used to generate the credential, which may be passed straight to the user.
 
@@ -237,7 +237,7 @@ Revoke a credential associated with a given `identifier`. This method shall publ
 
 Instantiate a new User.
 
-### const application = user.apply(details, certId)
+### const application = user.createApplication(details, certId)
 
 Generate an application with the relevant details to send to the Issuer responsible for `certId`. When sending this to the issuer, this should be accompanied by a document proving these properties, e.g. photo ID.
 
