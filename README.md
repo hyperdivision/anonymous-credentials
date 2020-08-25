@@ -4,10 +4,44 @@ Anonymous credential scheme based on https://eprint.iacr.org/2017/115.pdf
 
 ## Usage
 
+In an anonymous credential system you have three actors; issuers that
+acts as a trust anchor and issue certificates, verifiers who check credentials
+as part of registration or authentication, and users who posses certificates.
+
+Certificates are akin to SSL certificates, but also very different. An issuer
+verifies the information that goes into the certificate out of band, eg checking
+public registers, notarized documents etc. It will then issue a certificate to
+the user, which the user in turn can create credentials from. Credentials prove
+a subset of the attributes contained in the certificate, but in a zero knowledge
+manner. From a certificate, infinite credentials can be made, and they are
+unlinkable, meaning two credentials cannot be traced back to the same
+certificate, except if one gets revoked. A credential can be made from a
+certificate without contacting the issuer, making them ideal as an trust
+mechanism in distributed systems.
+
+A fresh system is initialised as follows:
+
+First an issuer must create their certifications based on a "schema". They can
+then publish which certifications they provide, so verifiers and users can
+choose which they want to accept and apply for, respectively.
+
+Verifiers can then start offering their services, guarded by a valid
+credential under a given certification.
+
+Users can now apply for a certificate from an issuer, and after successful
+application, can start using their certificate.
+
+Verifiers must make public which certifications they accept, and which
+attributes from a given certification must be proven. Users can fetch this, and
+create a new credential to show the verifier they possess a certificate
+satisfying the attributes required by the verifier.
+
 ### Issuer
 ```js
 const issuer = new Issuer('./some-storage-path')
 
+// First the issuer must define their certifications.
+// In this case we only define a single schema
 const schema = {
   "age": "number",
   "nationality": "string",
@@ -17,10 +51,14 @@ const schema = {
   "gender": "string"
 }
 
-issuer.addCertification(schema, (certId) => {
-  // do something with certId, e.g list online
+// Now the issuer adds this certification to their list
+issuer.addCertification(schema, (err, certId) => {
+  if (err) throw err
 
-  // answer a verifier's request for this certification
+  // CertId can now be listed along with the accepted schema
+
+  // Later a a verifier or user may request the definition for
+  // this certification
   const certInfo = issuer.getCertInfo(certId)
 })
 ```
@@ -29,23 +67,29 @@ Now the issuer is ready to grant credentials from the certification.
 
 ### Verifier
 
-A new verifier must first add the certifications it is willing to accept. They may request the necessary info associated with `certId` from the issuer
+A new verifier must first add the certifications it is willing to accept.
+They may request the necessary info associated with `certId` from the issuer
 
 ```js
 const verifier = new Verifier('./some-other-storage')
 
+// Verifier adds a certification they accept.
+// This info could be hardcoded or come from reading something external
 verifier.registerCertification(certInfo, () => {
-  // verifier online
+  // verifier is now ready to check credentials
 })
 ```
 
 ### User
 
-The user should have obtained `certId` from a public list. Now they may send an application for a credential:
+The user should have obtained `certId` from a public issuer list. Now they can
+apply for a certificate from an issuer:
 
 ```js
 const user = new User()
 
+// This information is based on the schema from the issuer
+// How the issuer verifies the authenticity of this is up to them, eg. KYC
 const application = {
   "age": 66,
   "nationality": "italy",
@@ -55,37 +99,51 @@ const application = {
   "gender": "male"
 }
 
- /* --- Client Side --- */
+/* --- Client Side --- */
 
-const app = user.apply(application, certId)
+// User creates an application payload
+const app = user.createApplication(application, certId)
 
-(app, { metadata }) --> server // metadata should be proof of ID
+// User sends application to issuer somehow, eg over the network
+// metadata can be any required proof the issuer requires to check the
+// authenticity of the information in the application
+(app, { metadata }) --> server
 
- /* --- Server Side --- */
+/* --- Server Side --- */
+
+// Issuer receives a new application
 (app) => {
-  const issuanceInit = issuer.addIssuance(app)
+  // here we skip any queuing or checking of metadata and just start the
+  // issuance protocol right away
+  const issuanceInit = issuer.beginIssuance(app)
 }
 
+// We must now send the issuanceInit response back to the user
 (issuanceInit) --> client
 
- /* --- Client Side --- */
+/* --- Client Side --- */
 
+// User must now perform some computation on the issuanceInit response and
+// send back the issuanceResponse to the issuer
 (issuanceInit) => {
   const issuanceResponse = user.obtain(issuanceInit)
 }
 
 (issuanceResponse) --> server
 
- /* --- Server Side --- */
+/* --- Server Side --- */
 
+// The issuer can now finalise the certificate and send it back to the user
 (issuanceResponse) => {
   const final = issuer.grantCredential(issuanceResponse)
 }
 
 (final) --> client
 
- /* --- Client Side --- */
+/* --- Client Side --- */
 
+// The user must now store the certficiate so it can be used to generate future
+// credentials
 (final) => {
   user.store(final)
 }
@@ -94,32 +152,42 @@ const app = user.apply(application, certId)
 Now the user has a credential, which they may present to a verifier:
 
 ```js
- /* --- Client Side --- */
+/* --- Client Side --- */
 
+// The verifier has somehow communicated to the user that they require a
+// certificate from our issuer above and require the user to prove their
+// age and nationality
 const transcript = user.present(['age', 'nationality'])
 
 (transcript) --> verifier
 
- /* --- Server Side --- */
+/* --- Server Side --- */
 
+// The verifier can check the transcript and will get a unique identifier back
+// from the credential. The transcript and identifier can be stored in a
+// database for future association and in case a user needs to be reported to
+// the issuer for revocation
 verifier.validate(transcript, (err, identifier) => {
   if (err) {
     // handle reject user
   }
 
-  // identifier should be associated with this user
-  // as it is needed to report malicious parties
+
 })
 ```
 
-If a malicious user is detected, the `transcript` associated with their credential may be reported to the issuer and, if appropriate, the issuer may revoke the entire credential:
+If a malicious user is detected, the `transcript` associated with their
+credential may be reported to the issuer and, if appropriate, the issuer may
+revoke the entire credential:
 
 ```js
-/* --- Verifier --- */ 
+/* --- Verifier --- */
 
+// Incident report here is whatever the issuer requires to process a revocation
+// request. This could be evidence of malice
 (identifier, { incidentReport }) --> issuer
 
-/* --- Issuer --- */ 
+/* --- Issuer --- */
 
 // check incidentReport, if user is at fault:
 (identifier) => {
@@ -133,32 +201,43 @@ If a malicious user is detected, the `transcript` associated with their credenti
 
 ### Issuer
 
-#### const org = new Issuer(storage)
+#### `const org = new Issuer(storage)`
 
-Instatiate a new Issuer instance. `storage` designates the path which shall be used to store revocation list information.
+Instatiate a new Issuer instance. `storage` designates the path which shall be
+used to store revocation list information.
 
-#### org.addIssuance(application)
+#### `org.addCertification(schema, cb(err, certId))`
+
+Register a new certification. Takes a JSON `schema` specifying field titles and
+types and returns the resulting certification's `certId`,  a unique identifier
+string, to the callback provided.
+
+The certification is stored in `issuer.certifications` under it's `certId` and
+may be accessed by `issuer.certifications[certId]`.
+
+#### `const certInfo = org.getPublicCert(certId)`
+
+Get the public keys and revocation list information associated with a given
+`certId`. This info is passed to a verifier for them to recognise
+new certifications. `certInfo` is returned as a `buffer` containing the
+serialized information to be passed to a verifier.
+
+### `for (const [certId, certInfo] of org.getPublicCerts())`
+
+Iterate over all public certifications as a list of pairs of `certId` and
+`certInfo`. See the above method for the encoding.
+
+#### `org.beginIssuance(application)`
 
 Begin a new issuance protocol. This method takes a user's `application`, which is the output of `user.apply` and outputs a `setup` object, encoding blinded curve points that are used to generate the credential, which may be passed straight to the user.
 
-#### org.grantCredential(res)
+#### `org.grantCredential(res)`
 
 This is the Issuer's final step during issuance and takes the output of `user.obtain`. In this step the Issuer contributes entropy towards the users credential and seals the credential by exponentiating the product of all curve points in the credential by the Issuer's secret key. This term is used in a bilinear pairing equality to verify the sum of exponents during verification of the credential.
 
-#### async org.revokeCredential(identifier, cb())
+#### `org.revokeCredential(identifier, cb(err))`
 
 Revoke a credential associated with a given `identifier`. This method shall publish the root id associated with this key to the certifications revocation list, anyone subscribed to the revocation list may then derive all keys associated with the root id and checks against these keys during verification.
-
-#### async org.addCertification(schema, cb(certId))
-
-Register a new certification. Takes a JSON `schema` specifying field titles and types and returns the resulting ertification's `certId`,  a unique identifier string, to the callback provided.
-
-The certification is stored in `issuer.certifications` under it's `certId` and may be accessed by `issuer.certifications[certId]`.
-
-#### const certInfo = org.getPublicCert(certId)
-
-Get the public keys and revocation list informnation associated with a given `certId`. This info is passed to a verifier for them to recognise new certifications. `certInfo` is returned as a `buffer` containing the serialized information to be passed to a verifier.
-
 
 ### User
 
@@ -166,7 +245,7 @@ Get the public keys and revocation list informnation associated with a given `ce
 
 Instantiate a new User.
 
-### const application = user.apply(details, certId)
+### const application = user.createApplication(details, certId)
 
 Generate an application with the relevant details to send to the Issuer responsible for `certId`. When sending this to the issuer, this should be accompanied by a document proving these properties, e.g. photo ID.
 
@@ -199,16 +278,15 @@ Access an identity containing the attributes listed in `required`. Takes an `arr
 
 Instantiate a new Verifier. `storage` should be a path designated where revocation list data shall be stored.
 
+#### async verifier.registerCertification(cert, cb())
+
+Recognise a new certification. `cert` is a `buffer` as outputted of `org.getCertInfo(certId)`, containing the serialization of the certification public keys and the information needed to sync the `revocation list` associated with the certification.
+
 #### async verifier.validate(transcript, cb(err, identifier))
 
 Validate a given `transcript`, which is the `buffer` returned by `user.present`. `cb` should have the signature `cb(err)` . An error message shall be passed to `cb` if validation fails.
 
 `identifier` is needed when reporting bad users to the issuing party, therefore it should be associated with that user account.
-
-#### async verifier.registerCertification(cert, cb())
-
-Recognise a new certification. `cert` is a `buffer` as outputted of `org.getCertInfo(certId)`, containing the serialization of the certification public keys and the information needed to sync the `revocation list` associated with the certification.
-
 
 ## How it works
 

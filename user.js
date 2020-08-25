@@ -11,7 +11,7 @@ module.exports = class User {
     this.identities = []
   }
 
-  apply (details, certId) {
+  createApplication (details, certId) {
     // cert.validate(application)
 
     const identity = new Identity(details, certId)

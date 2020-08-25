@@ -7,13 +7,15 @@ const { PrivateCertification } = require('./certification')
 
 module.exports = class Issuer {
   constructor (storage) {
+    assert(typeof storage === 'string', 'storage must be string')
     this.certifications = {}
     this.issuances = []
     this._storage = storage
   }
 
-  addIssuance (buf) {
-    const application = Application.decode(buf)
+  beginIssuance (app) {
+    assert(Buffer.isBuffer(app), 'application must be buffer')
+    const application = Application.decode(app)
 
     const cert = this.certifications[application.certId]
 
@@ -50,7 +52,7 @@ module.exports = class Issuer {
       storage: this._storage,
       oninit: () => {
         this.certifications[certification.certId] = certification
-        cb(certification.certId)
+        cb(null, certification.certId)
       }
     })
   }
@@ -62,5 +64,11 @@ module.exports = class Issuer {
 
   getPublicCert (certId) {
     return this.certifications[certId].toPublicCertificate()
+  }
+
+  * getPublicCerts () {
+    for (var key of Object.keys(this.certifications)) {
+      yield [key, this.getPublicCert(key)]
+    }
   }
 }
