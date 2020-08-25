@@ -157,7 +157,7 @@ class PrivateCertification {
     offset += schemaLen
 
     PrivateCertification.decode.bytes = offset - startIndex
-    return new PrivateCertification(opts)
+    return new this(opts)
   }
 }
 
@@ -224,7 +224,7 @@ class PublicCertification {
     offset += schemaLen
 
     PublicCertification.decode.bytes = offset - startIndex
-    return new PublicCertification(opts)
+    return new this(opts)
   }
 
   encodingLength () {

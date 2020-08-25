@@ -84,7 +84,7 @@ module.exports = class Identity {
     const certId = buf.subarray(offset, offset + 32).toString('hex')
     offset += 32
 
-    const id = new Identity(attrs, certId)
+    const id = new this(attrs, certId)
 
     id.credential = Credential.decode(buf, offset)
     offset += Credential.decode.bytes
@@ -212,6 +212,6 @@ class Pseudonym {
     offset += sodium.crypto_sign_PUBLICKEYBYTES
 
     Pseudonym.decode.bytes = offset - startIndex
-    return new Pseudonym({ root, sigs, certKey }, count)
+    return new this({ root, sigs, certKey }, count)
   }
 }

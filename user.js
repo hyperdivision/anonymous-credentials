@@ -87,7 +87,7 @@ module.exports = class User {
     if (!offset) offset = 0
     const startIndex = offset
 
-    const user = new User()
+    const user = new this()
 
     const ids = buf.readUInt32LE(offset)
     offset += 4
