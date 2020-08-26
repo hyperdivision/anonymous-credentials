@@ -48,22 +48,22 @@ module.exports = class User {
     this.applications.splice(index, 1)
   }
 
-  present (attributes) {
-    const id = this.findId(attributes)
+  present (attributes, certId) {
+    const id = this.findId(attributes, certId)
     const presentation = id.present(attributes)
 
     return presentation.encode()
   }
 
-  findId (required) {
+  findId (required, certId) {
     const subset = this.identities.filter(id => certId === undefined ? true : id.certId === certId)
     return subset.find(id => hasAttributes(id.attributes, required))
   }
 
   getIdentity (certId) {
-    return this.identities.find(id => id.certId = certId)
+    return this.identities.find(id => id.certId === certId)
   }
-  
+
   encode (buf, offset) {
     if (!buf) buf = Buffer.alloc(this.encodingLength())
     if (!offset) offset = 0
