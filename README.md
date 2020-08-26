@@ -261,9 +261,11 @@ Store a completed credential. `msg` should be a `buffer` outputted by a call to 
 
 This will be stored internally as a new `Identity`, which has associated with it a credential as well as the `root` from which all pseudonyms are derived. This `Identity` can be later accessed using the `findId` method below or accessed directly from `user.identities`.
 
-### const transcript = user.present(attributes)
+### const transcript = user.present(attributes, certId)
 
 Generate a transcript showing a valid credential, only disclosing the properties specified in `attributes`. `properties` should be passed as an `array` of `strings`, e.g `['age', 'nationality']`; an appropriate identity with the required attributes is then chosen to present.
+
+If `certId` is given, only identities belonging to this `certId` shall be selected, returning `undefined` if no suitable identity is found.
 
 Returns a `buffer` containing the serialized data required by a verifier to validate the credential. `transcript` should be passed as an argument to `verifier.validate`
 

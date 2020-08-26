@@ -56,7 +56,8 @@ module.exports = class User {
   }
 
   findId (required) {
-    return this.identities.find(id => hasAttributes(id.attributes, required))
+    const subset = this.identities.filter(id => certId === undefined ? true : id.certId === certId)
+    return subset.find(id => hasAttributes(id.attributes, required))
   }
 
   encode (buf, offset) {
