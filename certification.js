@@ -76,7 +76,7 @@ class PrivateCertification {
   }
 
   _revoke (root, cb) {
-    if (this.credentials.find(cred => cred.root === root) === undefined) {
+    if (this.credentials.find(cred => !Buffer.compare(cred.root, root)) === undefined) {
       throw new Error('credential does not belong to this certificate')
     }
 
