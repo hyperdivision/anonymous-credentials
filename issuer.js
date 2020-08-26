@@ -61,7 +61,7 @@ module.exports = class Issuer {
     const cert = this.certifications[identifier.certId]
 
     if (Object.hasOwnProperty.call(identifier, 'root')) {
-      cert._revoke(root, cb)
+      cert._revoke(identifier.root, cb)
     } else if (Object.hasOwnProperty.call(identifier, 'pk')) {
       cert.revoke(identifier.pk, cb)
     } else {
