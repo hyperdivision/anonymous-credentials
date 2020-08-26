@@ -59,7 +59,14 @@ module.exports = class Issuer {
 
   revokeCredential (identifier, cb) {
     const cert = this.certifications[identifier.certId]
-    cert.revoke(identifier.pk, cb)
+
+    if (Object.hasOwnProperty.call(identifier, 'root')) {
+      cert._revoke(root, cb)
+    } else if (Object.hasOwnProperty.call(identifier, 'pk')) {
+      cert.revoke(identifier.pk, cb)
+    } else {
+      cb(new Error('identifier cannot be parsed.'))
+    }
   }
 
   getPublicCert (certId) {

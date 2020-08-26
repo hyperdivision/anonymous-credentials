@@ -60,6 +60,10 @@ module.exports = class User {
     return subset.find(id => hasAttributes(id.attributes, required))
   }
 
+  getIdentity (certId) {
+    return this.identities.find(id => id.certId = certId)
+  }
+  
   encode (buf, offset) {
     if (!buf) buf = Buffer.alloc(this.encodingLength())
     if (!offset) offset = 0

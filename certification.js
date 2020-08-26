@@ -72,11 +72,15 @@ class PrivateCertification {
   revoke (revokeKey, cb) {
     const revokeRoot = this.credentials.map(c => c.root).find(keys.findRoot(revokeKey, 256))
 
-    if (this.credentials.find(cred => cred.root === revokeRoot) === undefined) {
+    this._revoke(revokeRoot, cb)
+  }
+
+  _revoke (root, cb) {
+    if (this.credentials.find(cred => cred.root === root) === undefined) {
       throw new Error('credential does not belong to this certificate')
     }
 
-    this.revocationList.add(revokeRoot, cb)
+    this.revocationList.add(root, cb)
   }
 
   encode (buf, offset) {
