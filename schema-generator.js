@@ -19,10 +19,12 @@ function writeToFile (i) {
   const scheme = generateScheme()
   const application = generateApplication(scheme)  
 
-  fs.writeFile(path.join(dirname, 'schema', i + '.json'), JSON.stringify(scheme), (err) => {
+  const id = shasum(Buffer.from(JSON.stringify(scheme))).toString('hex')
+
+  fs.writeFile(path.join(dirname, 'schema', id + '.json'), JSON.stringify(scheme), (err) => {
     if (err) throw err
 
-    fs.writeFile(path.join(dirname, 'app', i + '.json'), JSON.stringify(application), (err) => {
+    fs.writeFile(path.join(dirname, 'app', id + '.json'), JSON.stringify(application), (err) => {
       if (err) throw err
 
       writeToFile(--i)
