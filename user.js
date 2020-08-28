@@ -108,7 +108,7 @@ module.exports = class User {
 }
 
 function hasAttributes(id, attrs) {
-  return attrs.reduce((b, a) => b && Object.prototype.hasOwnProperty.call(id, a))
+  return attrs.reduce((b, a) => b && Object.prototype.hasOwnProperty.call(id, a), true)
 }
 
 function rand () {
