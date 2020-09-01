@@ -1,6 +1,7 @@
 const curve = require('../lib/curve')
 const sha512 = require('sha512-wasm')
 const assert = require('nanoassert')
+const schnorr = require('../lib/schnorr-proof')
 const { AccumulatorPublicKey, WitnessProof } = require('../wire')
 
 const { F, F12, G1, G2 } = curve
@@ -56,13 +57,15 @@ module.exports.Revoker = class Revoker {
     assert(verify(showing, pubkey), 'opening failed: invalid signature')
 
     const { T } = showing
-    const c = G1.sub(T[2], G1.add(G1.mulScalar(T[0], this.secrets.xi1), G1.mulScalar(T[1], this.secrets.xi2)))
+
+    const d = G1.sub(T[2], G1.add(G1.mulScalar(T[0], this.secrets.xi1), G1.mulScalar(T[1], this.secrets.xi2)))
     return c
   }
 
-  revoke (y) {
+  revoke (witness) {
     const acc = this.acc.current
-    this.acc.add(y)
+    console.log(witness)
+    this.acc.add(witness.y)
 
     this.history.push([ this.acc.current, Date.now() ])
 
@@ -71,7 +74,7 @@ module.exports.Revoker = class Revoker {
 
     return {
       acc,
-      y
+      y: witness.y
     }
   }
 
@@ -200,8 +203,7 @@ const Identifier = module.exports.Identifier = class Identifier {
     const cBlinds = [alpha, beta, this.y, delta1, delta2, gamma, delta].map((scalar, i) => {
       return F.add(blinds[i], F.mul(challenge, scalar))
     })
-    console.log('--------------')
-    console.log(verify({ T, challenge, cBlinds }, this.pk))
+
     return new WitnessProof({ T, challenge, cBlinds })
   }
 
@@ -463,4 +465,80 @@ class Accumulator {
   encodingLength () {
     return 352
   }
+}
+
+module.exports.Prover = function Prover (id, generators) {
+  const [g0, g1, g2, g3, g4] = generators
+
+  const blind1 = curve.randomScalar()
+  const blind2 = curve.randomScalar()
+
+  const C1 = G1.affine(G1.mulScalar(id.pk.u, blind1))
+  const C2 = G1.affine(G1.mulScalar(id.pk.v, blind2))
+  const C = G1.affine(G1.add(G1.mulScalar(g0, id.y), G1.mulScalar(g1, F.add(blind1, blind2))))
+
+  const beta = []
+  for (let i = 0; i < 4; i++) beta.push(curve.randomScalar())
+
+  const delta = beta.map(n => F.mul(n, id.y))
+  delta[2] = F.mul(id.w.d, beta[2])
+  delta[3] = F.mul(id.w.d, beta[3])
+
+  const U = []
+  U[0] = G1.affine(G1.add(G1.mulScalar(g0, beta[0]), G1.mulScalar(g1, beta[1])))
+  U[1] = G1.affine(G1.add(id.w.c, G1.mulScalar(g1, beta[0])))
+  U[2] = G1.affine(G1.add(G1.mulScalar(g2, beta[2]), G1.mulScalar(g3, beta[3])))
+  U[3] = G1.affine(G1.mulScalar(g4, F.mul(beta[2], id.w.d)))
+
+  const challenge = hash(...U)
+
+  const prover1 = schnorr.prover([g0, g1])
+  const prover2 = schnorr.prover([U[0], g0, g1])
+  const prover3 = schnorr.prover([g2, g3])
+  const prover4 = schnorr.prover([U[2], g2, g3])
+  const prover5 = schnorr.prover([g4])
+  const prover6 = schnorr.prover([g0, g1])
+  const prover7 = schnorr.proverF12([id.pk.e.gg, curve.pairing(g1, id.pk.a), curve.pairing(g1, id.pk.g2), curve.pairing(U[1], id.pk.g2)])
+
+  const proofs = []
+  proofs.push(prover1.genProof([beta[0], beta[1]]))
+  proofs.push(prover2.genProof([F.neg(id.y), delta[0], delta[1]]))
+  proofs.push(prover3.genProof([beta[2], beta[3]]))
+  proofs.push(prover4.genProof([F.neg(id.w.d), delta[2], delta[3]]))
+  proofs.push(prover5.genProof([delta[2]]))
+  proofs.push(prover6.genProof([id.y, F.add(blind1, blind2)]))
+  proofs.push(prover7.genProof([F.neg(id.w.d), beta[0], delta[0], F.neg(id.y)]))
+
+  return {
+    C1, C2, C,
+    U,
+    proofs
+  }
+}
+
+module.exports.VerifyProof = function VerifyProof (proof, generators, pk) {
+  const [g0, g1, g2, g3, g4] = generators
+
+  const { U, C, proofs, delta, beta, y, d, c } = proof
+
+  const prover1 = schnorr.prover([g0, g1])
+  const prover2 = schnorr.prover([U[0], g0, g1])
+  const prover3 = schnorr.prover([g2, g3])
+  const prover4 = schnorr.prover([U[2], g2, g3])
+  const prover5 = schnorr.prover([g4])
+  const prover6 = schnorr.prover([g0, g1])
+  const prover7 = schnorr.proverF12([pk.e.gg, curve.pairing(g1, pk.a), curve.pairing(g1, pk.g2), curve.pairing(U[1], pk.g2)])
+
+  let valid = true
+  valid &= prover1.verify(U[0], proofs[0])
+  valid &= prover2.verify(G1.zero, proofs[1])
+  valid &= prover3.verify(U[2], proofs[2])
+  valid &= prover4.verify(G1.zero, proofs[3])
+  valid &= prover5.verify(U[3], proofs[4])
+  valid &= prover6.verify(C, proofs[5])
+
+  const pairingU2 = F12.div(curve.pairing(U[1], pk.a), pk.e.vg)
+  valid &= prover7.verify(pairingU2, proofs[6])
+
+  return valid === 1
 }
