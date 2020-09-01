@@ -467,8 +467,8 @@ class Accumulator {
   }
 }
 
-module.exports.Prover = function Prover (id, generators) {
-  const [g0, g1, g2, g3, g4] = generators
+module.exports.Prover = function Prover (id, basepoints) {
+  const [g0, g1, g2, g3, g4] = basepoints
 
   const blind1 = curve.randomScalar()
   const blind2 = curve.randomScalar()
@@ -492,53 +492,98 @@ module.exports.Prover = function Prover (id, generators) {
 
   const challenge = hash(...U)
 
-  const prover1 = schnorr.prover([g0, g1])
-  const prover2 = schnorr.prover([U[0], g0, g1])
-  const prover3 = schnorr.prover([g2, g3])
-  const prover4 = schnorr.prover([U[2], g2, g3])
-  const prover5 = schnorr.prover([g4])
-  const prover6 = schnorr.prover([g0, g1])
-  const prover7 = schnorr.proverF12([id.pk.e.gg, curve.pairing(g1, id.pk.a), curve.pairing(g1, id.pk.g2), curve.pairing(U[1], id.pk.g2)])
-
   const proofs = []
-  proofs.push(prover1.genProof([beta[0], beta[1]]))
-  proofs.push(prover2.genProof([F.neg(id.y), delta[0], delta[1]]))
-  proofs.push(prover3.genProof([beta[2], beta[3]]))
-  proofs.push(prover4.genProof([F.neg(id.w.d), delta[2], delta[3]]))
-  proofs.push(prover5.genProof([delta[2]]))
-  proofs.push(prover6.genProof([id.y, F.add(blind1, blind2)]))
-  proofs.push(prover7.genProof([F.neg(id.w.d), beta[0], delta[0], F.neg(id.y)]))
+  const allSecrets = [F.neg(id.w.d), F.neg(id.y), F.add(blind1, blind2)].concat(beta, delta)
+  const allScalars = allSecrets.map(curve.randomScalar)
+  const blinds = allScalars.map((s, i) => F.add(s, F.mul(challenge, allSecrets[i])))
+
+  const optsG1 = {
+    add: (a, b) => G1.add(a, b),
+    mul: (a, b) => G1.mulScalar(a, b)
+  }
+
+  const generatorsF12 = [
+    id.pk.e.gg,
+    curve.pairing(g1, id.pk.a),
+    curve.pairing(g1, id.pk.g2),
+    curve.pairing(U[1], id.pk.g2)
+  ]
+
+  proofs.push(genProof([g0, g1], [3, 4]))
+  proofs.push(genProof([U[0], g0, g1], [1, 7, 8]))
+  proofs.push(genProof([g2, g3], [5, 6]))
+  proofs.push(genProof([U[2], g2, g3], [0, 9, 10]))
+  proofs.push(genProof([g4], [9]))
+  proofs.push(genProof([G1.neg(g0), g1], [1, 2]))
+  proofs.push(genProof(generatorsF12, [0, 3, 7, 1], {
+    mul: (a, b) => F12.exp(a, b),
+    add: (a, b) => F12.mul(a, b)
+  }))
 
   return {
-    C1, C2, C,
+    C, C1, C2,
     U,
-    proofs
+    proofs,
+    blinds,
+    challenge
   }
+
+  function genProof (generators, indices, { add, mul } = optsG1) {
+    const scalars = indices.map(i => allScalars[i])
+    const secrets = indices.map(i => allSecrets[i])
+
+    const products = generators.map((g, i) => mul(g, scalars[i]))
+    const P_ = products.reduce((acc, el) => add(acc, el))
+
+    return {
+      P_, indices
+    }
+  }
+}
+
+function randomOracle (data) {
+  return sha512().update(Buffer.from(data)).digest('hex')
 }
 
 module.exports.VerifyProof = function VerifyProof (proof, generators, pk) {
   const [g0, g1, g2, g3, g4] = generators
 
-  const { U, C, proofs, delta, beta, y, d, c } = proof
+  const { U, C, proofs, blinds, challenge } = proof
 
-  const prover1 = schnorr.prover([g0, g1])
-  const prover2 = schnorr.prover([U[0], g0, g1])
-  const prover3 = schnorr.prover([g2, g3])
-  const prover4 = schnorr.prover([U[2], g2, g3])
-  const prover5 = schnorr.prover([g4])
-  const prover6 = schnorr.prover([g0, g1])
-  const prover7 = schnorr.proverF12([pk.e.gg, curve.pairing(g1, pk.a), curve.pairing(g1, pk.g2), curve.pairing(U[1], pk.g2)])
+  const generatorsF12 = [pk.e.gg, curve.pairing(g1, pk.a), curve.pairing(g1, pk.g2), curve.pairing(U[1], pk.g2)]
+
+  const optsG1 = {
+    add: (a, b) => G1.add(a, b),
+    mul: (a, b) => G1.mulScalar(a, b),
+    eq: (a, b) => G1.eq(a, b)
+  }
 
   let valid = true
-  valid &= prover1.verify(U[0], proofs[0])
-  valid &= prover2.verify(G1.zero, proofs[1])
-  valid &= prover3.verify(U[2], proofs[2])
-  valid &= prover4.verify(G1.zero, proofs[3])
-  valid &= prover5.verify(U[3], proofs[4])
-  valid &= prover6.verify(C, proofs[5])
+  valid &= verify([g0, g1], U[0], proofs[0])
+  valid &= verify([U[0], g0, g1], G1.zero, proofs[1])
+  valid &= verify([g2, g3], U[2], proofs[2])
+  valid &= verify([U[2], g2, g3], G1.zero, proofs[3])
+  valid &= verify([g4], U[3], proofs[4])
+  valid &= verify([G1.neg(g0), g1], C, proofs[5])
 
   const pairingU2 = F12.div(curve.pairing(U[1], pk.a), pk.e.vg)
-  valid &= prover7.verify(pairingU2, proofs[6])
+  valid &= verify(generatorsF12, pairingU2, proofs[6], {
+    mul: (a, b) => F12.exp(a, b),
+    add: (a, b) => F12.mul(a, b),
+    eq: (a, b) => F12.eq(a, b)
+  })
 
   return valid === 1
+
+  function verify (generators, P, proof, { add, mul, eq } = optsG1) {
+    const _blinds = proof.indices.map(i => blinds[i])
+
+    const products = generators.map((g, i) => mul(g, _blinds[i]))
+    var lhs = products.reduce((acc, el) => add(acc, el))
+
+    var tP = mul(P, challenge)
+    var rhs = add(proof.P_, tP)
+
+    return eq(lhs, rhs)
+  }
 }
