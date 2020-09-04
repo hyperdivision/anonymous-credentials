@@ -4,18 +4,20 @@ const keygen = require('./lib/keygen')
 const Credential = require('./credential')
 const { Presentation, Signature } = require('./wire')
 const { Identifier } = require('./experiment/revoker')
+const schnorr = require('./lib/schnorr-proof')
 const attributes = require('./lib/gen-attributes')
+const hash = require('./experiment/challenge')
 
 module.exports = class Identity {
   constructor (attrs, certId) {
     this.credential = new Credential(Object.keys(attrs).length)
-    this.pseudonym = null
+    this.identifier = null
     this.attributes = attrs
     this.certId = certId
   }
 
   finalize ({ identity, info, pk }) {
-    this.pseudonym = new Identifier(identity, pk)
+    this.identifier = new Identifier(identity, pk)
     this.credential.finalize(info)
   }
 
@@ -27,10 +29,22 @@ module.exports = class Identity {
     const encoded = Object.values(disclosed).map(v =>
       attributes.encode(v.toString()))
 
-    const showing = this.credential.show(encoded)
-    const toSign = showing.encode()
+    const nym = this.identifier.prover(this.identifier.pk.basepoints)
+    const cred = this.credential.show(encoded)
 
-    const witness = this.pseudonym.show()
+    const challenge = hash(...cred.generators, ...nym.U, nym.C)
+
+    const witness = nym.prove(cred.secrets[2], challenge)
+
+    cred.ret.proof = schnorr.prover(cred.generators, challenge).genProof(cred.secrets)
+    cred.ret.disclosed = disclosed
+
+    const presentation = {
+      cred: cred.ret,
+      witness
+    }
+
+    return presentation
 
     return new Presentation(disclosed, showing, witness, this.certId)
   }

@@ -1,10 +1,10 @@
 const assert = require('nanoassert')
 const sodium = require('sodium-native')
 const RevocationList = require('./revocation-list')
-const verify = require('./lib/verify')
-const verifyWitness = require('./experiment/revoker').verify
+const { verifyCredential, verifyWitness } = require('./lib/verify')
 const attributes = require('./lib/gen-attributes')
 const { Presentation } = require('./wire')
+const hash = require('./experiment/challenge')
 const { PublicCertification } = require('./certification')
 
 module.exports = class Verifier {
@@ -14,25 +14,34 @@ module.exports = class Verifier {
   }
 
   validate (buf, cb) {
-    const { disclosed, witness, showing, certId } = Presentation.decode(buf)
+    const { cred, witness, certId } = buf
+    // const { cred, witness, certId } = Presentation.decode(buf)
 
     const cert = this.certifications[certId]
+
     if (cert === undefined) return cb(new Error('certification not recognised.'))
 
+    const index = Object.keys(cred.disclosed).map(k => Object.keys(cert.schema).indexOf(k) + 1)
+    const undisclosed = cred._S.filter((_, i) => !index.includes(i))
+    const generators = [cred.C_, cred.S_, ...undisclosed]
+
+    const challenge = hash(...generators, ...witness.U, witness.C)
+
     // check for revoked credential
-    console.log('**************************************************', verifyWitness(witness, cert.pk.acc), '*****************************************************************')
-    if (!verifyWitness(witness, cert.pk.acc)) return cb(new Error('credential has been revoked'))
+    if (!verifyWitness(witness, cert.pk.acc, challenge)) {
+      return cb(new Error('credential has been revoked'))
+    }
 
-    const disclosure = Object.entries(disclosed).map(format)
+    const disclosure = Object.entries(cred.disclosed).map(format)
 
-    console.log(showing, cert.pk.credential)
-    if (!verify(showing, cert.pk.credential, disclosure)) {
+    if (!verifyCredential(cred, cert.pk.credential, disclosure, challenge, generators)) {
       return cb(new Error('credential cannot be verified'))
     }
 
     // identifier should be stored and used to report a user to the issuer
     const identifier = {
       witness,
+      challenge,
       certId
     }
 
@@ -52,6 +61,7 @@ module.exports = class Verifier {
 
   registerCertification (info, cb) {
     const cert = PublicCertification.decode(info)
+
     this.certifications[cert.certId] = cert
 
     cb()    

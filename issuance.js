@@ -16,10 +16,11 @@ function IssuingProtocol (keys, attr) {
   const S_ = G1.mulScalar(K_, keys.sk.a)
   const S0_ = G1.mulScalar(K_, keys.sk._a[0])
 
-  const k = attr.map(a => a.toString()).map(attributes.encode)
+  const k0 = curve.randomScalar()
+  const k = [k0].concat(attr.map(a => a.toString()).map(attributes.encode))
 
   const setup = new IssuanceSetup(k, K_, S_, S0_)
-  const response = respond(keys, k, S_)
+  const response = respond(keys, k.slice(1), S_)
 
   return {
     setup,

@@ -139,7 +139,6 @@ var StoreMessage = module.exports.StoreMessage = class StoreMessage {
 
     msg.pk = AccumulatorPublicKey.decode(buf, offset)
     offset += AccumulatorPublicKey.decode.bytes
-    console.log(msg.identity)
 
     StoreMessage.decode.bytes = offset - startIndex
     return msg
@@ -155,6 +154,14 @@ const AccumulatorPublicKey = module.exports.AccumulatorPublicKey = class Accumul
 
     this.g2 = opts.g2
     this.a = opts.a || curve.G2.mulScalar(this.g2, opts.secrets.alpha)
+
+    if (Object.hasOwnProperty.call(opts, 'basepoints')) {
+      this.basepoints = opts.basepoints
+    } else {
+      this.basepoints = new Array(5)
+      this.basepoints.fill(1).map((_, i, arr) => arr[i] = curve.randomPointG1())
+      this.basepoints[1] = this.h
+    }
 
     this.currentAccumulator = opts.current
 
@@ -182,6 +189,13 @@ const AccumulatorPublicKey = module.exports.AccumulatorPublicKey = class Accumul
     curve.encodeG1(this.h, buf, offset)
     offset += curve.encodeG1.bytes
 
+    for (let i = 0; i < this.basepoints.length; i++) {
+      if (i === 1) continue
+
+      curve.encodeG1(this.basepoints[i], buf, offset)
+      offset += curve.encodeG1.bytes
+    }
+
     curve.encodeG1(this.currentAccumulator, buf, offset)
     offset += curve.encodeG1.bytes
 
@@ -196,7 +210,7 @@ const AccumulatorPublicKey = module.exports.AccumulatorPublicKey = class Accumul
   }
 
   encodingLength () {
-    return 864
+    return 1344
   }
 
   static decode (buf, offset) {
@@ -215,6 +229,16 @@ const AccumulatorPublicKey = module.exports.AccumulatorPublicKey = class Accumul
 
     opts.h = curve.decodeG1(buf, offset)
     offset += curve.decodeG1.bytes
+
+    opts.basepoints = []
+    for (let i = 0; i < 5; i++) {
+      if (i === 1) {
+        opts.basepoints.push(opts.h)
+      } else {
+        opts.basepoints.push(curve.decodeG1(buf, offset))
+        offset += curve.decodeG1.bytes
+      }
+    }
 
     opts.current = curve.decodeG1(buf, offset)
     offset += curve.decodeG1.bytes

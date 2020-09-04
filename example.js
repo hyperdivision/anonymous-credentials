@@ -44,29 +44,30 @@ org.addCertification(schema, function (certId) {
     // user stores the credential
     user.store(granted)
 
-    console.log(user.identities[0])
-    const buf = user.encode()
-    const sameUser = User.decode(buf)
+    // const buf = user.encode()
+    // const sameUser = User.decode(buf)
 
     const rev = org.certifications[certId].revoker.revoke(curve.randomScalar())
-    user.identities[0].pseudonym.update(rev)
-    sameUser.identities[0].pseudonym.update(rev)
+    user.identities[0].identifier.update(rev)
+
+    // verifier.certifications[certId].pk.acc = org.certifications[certId].revoker.pubkey
+    // user selects which attributes to show
+    const present = user.present(['age', 'drivers licence'])
 
     verifier.certifications[certId].pk.acc = org.certifications[certId].revoker.pubkey
-    // user selects which attributes to show
-    const present = sameUser.present(['age', 'drivers licence'])
-
     verifier.validate(present, function (err, identifier) {
       if (err) throw err
       console.log('credential has been accepted.')
 
-      console.log('-----------************************************-',identifier)
       org.revokeCredential(identifier, function (err, revinfo) {
-        console.log(verifier.certifications[certId])
         verifier.certifications[certId].pk.acc = org.certifications[certId].revoker.pubkey
 
+        const acc = org.certifications[certId].revoker.acc
+        const id = user.identities[0].identifier
+
+        user.identities[0].identifier.update(revinfo)
+
         const presentRevoked = user.present(['age', 'drivers licence'])
-        console.log(presentRevoked)
 
         const failure = verifier.validate(presentRevoked, function (err) {
           if (err) throw err

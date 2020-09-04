@@ -21,8 +21,7 @@ module.exports = class Credential {
     const alpha = rand()
     this.kappa = rand()
 
-    this.k[0] = rand()
-    init.k.forEach((val, i) => this.k[i + 1] = val)
+    init.k.forEach((val, i) => this.k[i] = val)
 
     this.S = G1.mulScalar(init.S_, alpha)
     this._S[0] = G1.mulScalar(init.S0_, alpha)
@@ -42,6 +41,7 @@ module.exports = class Credential {
 
     this.kappa = F.normalize(F.add(this.kappa, final.kappa))
     this.K = final.K
+
     final._S.forEach((val , i) => this._S[i + 1] = val)
     this.T = final.T
 
@@ -62,21 +62,34 @@ module.exports = class Credential {
     const beta = rand()
 
     // blinded by alpha
-    const blindK = G1.mulScalar(this.K, alpha)
-    const blindS = G1.mulScalar(this.S, alpha)
-
-    const blindedS_ = this._S.map(el => G1.mulScalar(el, alpha))
+    const K_ = G1.mulScalar(this.K, alpha)
+    const S_ = G1.mulScalar(this.S, alpha)
+    const _S = this._S.map(el => G1.mulScalar(el, alpha))
 
     const blindingFactor = F.neg(F.mul(alpha, F.inv(beta)))
 
     // blinded by div(alpha, beta)
-    const dBlindC = G1.mulScalar(this.C, blindingFactor)
-    const dBlindT = G1.mulScalar(this.T, blindingFactor)
+    const C_ = G1.mulScalar(this.C, blindingFactor)
+    const T_ = G1.mulScalar(this.T, blindingFactor)
 
     const undisclosed = {}
-    undisclosed.S = blindedS_.filter((_, i) => !disclosed.includes(i))
+    undisclosed.S = _S.filter((_, i) => !disclosed.includes(i))
     undisclosed.k = this.k.filter((_, i) => !disclosed.includes(i))
 
+    return {
+      ret: {
+        K_,
+        S_,
+        _S,
+        C_,
+        T_,
+      },
+      generators: [C_, S_, ...undisclosed.S],
+      secrets: [beta, this.kappa, ...undisclosed.k]
+
+    }
+
+    // --- construct proof in identity that owns cred
     const prover = schnorr.prover([dBlindC, blindS, ...undisclosed.S])
     const proof = prover.genProof([beta, this.kappa, ...undisclosed.k])
 

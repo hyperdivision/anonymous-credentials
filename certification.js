@@ -56,11 +56,13 @@ class PrivateCertification {
   }
 
   addCredential (cred) {
+    const g0 = this.revoker.pubkey.basepoints[0]
+    cred.revocationPoint = curve.G1.mulScalar(g0, cred.identifier.y)
     this.credentials.push(new RegisteredCredential(cred))
   }
 
-  genIdentifier () {
-    return this.revoker.issueIdentifier()
+  genIdentifier (k) {
+    return this.revoker.issueIdentifier(k)
   }
 
   issue (details) {
@@ -72,24 +74,23 @@ class PrivateCertification {
     return issuance
   }
 
-  revoke (witness, cb) {
-    const revokeUser = this.revoker.open(witness)
+  revoke (identifier, cb) {
+    const toRevoke = this.revoker.open(identifier)
 
     // if (this.credentials.find(cred => curve.G1.eq(cred.identifier.w.c, revokeUser)) === undefined) {
     //   throw new Error('credential does not belong to this certificate')
     // }
 
-    console.log(revokeUser, '-------------------------------------------------------------')
-    this.revoker.revoke(revokeUser)
+    const revokeUser = this.credentials.find(c =>
+      curve.G1.eq(c.revocationPoint, toRevoke))
+
+    const revinfo = this.revoker.revoke(revokeUser.identifier.y)
     // this.revocationList.add({
     //   newValue: this.revoker.acc.current,
     //   revoked: revokeUser
     // }, cb)
 
-    return cb({
-      newValue: this.revoker.acc.current,
-      revoked: revokeUser
-    })
+    return cb(null, revinfo)
   }
 
   encode (buf, offset) {
@@ -255,6 +256,7 @@ class RegisteredCredential {
   constructor (opts) {
     this.attr = opts.attr
     this.identifier = opts.identifier
+    this.revocationPoint = opts.revocationPoint
   }
 
   encode (buf, offset) {

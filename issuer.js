@@ -33,7 +33,7 @@ module.exports = class Issuer {
     const info = issuance.response(res.details)
 
     // assertion will throw on bad input before we execute following code
-    const identity = cert.genIdentifier()
+    const identity = cert.genIdentifier(issuance.setup.k[0])
 
     cert.addCredential({
       attr: issuance.attr,
@@ -56,7 +56,7 @@ module.exports = class Issuer {
 
   revokeCredential (identifier, cb) {
     const cert = this.certifications[identifier.certId]
-    cert.revoke(identifier.witness, cb)
+    cert.revoke(identifier, cb)
   }
 
   getPublicCert (certId) {
