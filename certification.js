@@ -68,8 +68,9 @@ class PrivateCertification {
 
   issue (details) {
     this.validate(details)
+    const attributes = Object.keys(this.schema).map(k => k + details[k])
 
-    const issuance = new IssuingProtocol(this.keys.cert, Object.values(details))
+    const issuance = new IssuingProtocol(this.keys.cert, attributes)
     issuance.certId = this.certId
 
     return issuance

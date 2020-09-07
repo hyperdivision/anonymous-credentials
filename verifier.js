@@ -49,7 +49,7 @@ module.exports = class Verifier {
 
     // move attributes away from here, disclosed should give all info needed
     function format ([attribute, value]) {
-      var encodedAttr = attributes.encode(value.toString())
+      var encodedAttr = attributes.encode(attribute + value)
       var index = Object.keys(cert.schema).indexOf(attribute) + 1
 
       return [

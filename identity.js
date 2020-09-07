@@ -26,8 +26,8 @@ module.exports = class Identity {
     for (let item of disclosure) disclosed[item] = this.attributes[item]
 
     // TODO: validate against credential
-    const encoded = Object.values(disclosed).map(v =>
-      attributes.encode(v.toString()))
+    const encoded = Object.entries(disclosed).map(([k, v]) =>
+      attributes.encode(k + v))
 
     const nym = this.identifier.prover(this.identifier.pk.basepoints)
     const cred = this.credential.show(encoded)
