@@ -1,5 +1,6 @@
-const schnorr = require('./lib/schnorr-proof')
 const curve = require('./lib/curve')
+const hash = require('./lib/challenge')
+const schnorr = require('./lib/schnorr-proof')
 const { ObtainInfo, Showing } = require('./wire')
 
 const G1 = curve.G1
@@ -30,8 +31,11 @@ module.exports = class Credential {
     const R2 = G1.mulScalar(this._S[0], this.k[0])
     const R = G1.add(R1, R2)
 
-    const prover = schnorr.prover([this.S, this._S[0]])
-    var proof = prover.genProof([this.kappa, this.k[0]])
+    const generators = [this.S, this._S[0]]
+    const secrets = [this.kappa, this.k[0]]
+    const challenge = hash(...generators)
+
+    const proof = schnorr.prove(generators, secrets, challenge)
 
     return new ObtainInfo(this.S, this._S[0], R, proof)
   }
@@ -76,24 +80,27 @@ module.exports = class Credential {
     undisclosed.S = _S.filter((_, i) => !disclosed.includes(i))
     undisclosed.k = this.k.filter((_, i) => !disclosed.includes(i))
 
+    const generators = [C_, S_, ...undisclosed.S]
+    const secrets = [beta, this.kappa, ...undisclosed.k]
+
     return {
-      ret: {
+      prove,
+      generators,
+      secrets
+    }
+
+    function prove (challenge) {
+      const proof = schnorr.prove(generators, secrets, challenge)
+
+      return {
         K_,
         S_,
         _S,
         C_,
         T_,
-      },
-      generators: [C_, S_, ...undisclosed.S],
-      secrets: [beta, this.kappa, ...undisclosed.k]
-
+        proof
+      }
     }
-
-    // --- construct proof in identity that owns cred
-    const prover = schnorr.prover([dBlindC, blindS, ...undisclosed.S])
-    const proof = prover.genProof([beta, this.kappa, ...undisclosed.k])
-
-    return new Showing(blindK, blindS, blindedS_, dBlindC, dBlindT, proof)
   }
 
   encode (buf, offset) {

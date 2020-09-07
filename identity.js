@@ -3,10 +3,10 @@ const sodium = require('sodium-native')
 const keygen = require('./lib/keygen')
 const Credential = require('./credential')
 const { Presentation, Signature } = require('./wire')
-const { Identifier } = require('./experiment/revoker')
+const Identifier = require('./lib/identifier')
 const schnorr = require('./lib/schnorr-proof')
 const attributes = require('./lib/gen-attributes')
-const hash = require('./experiment/challenge')
+const hash = require('./lib/challenge')
 
 module.exports = class Identity {
   constructor (attrs, certId) {
@@ -35,18 +35,16 @@ module.exports = class Identity {
     const challenge = hash(...cred.generators, ...nym.U, nym.C)
 
     const witness = nym.prove(cred.secrets[2], challenge)
+    const showing = cred.prove(challenge)
 
-    cred.ret.proof = schnorr.prover(cred.generators, challenge).genProof(cred.secrets)
-    cred.ret.disclosed = disclosed
-
-    const presentation = {
-      cred: cred.ret,
-      witness
+    return {
+      disclosed,
+      showing,
+      witness,
+      certId: this.certId
     }
 
-    return presentation
-
-    return new Presentation(disclosed, showing, witness, this.certId)
+    // return new Presentation(disclosed, showing, witness, this.certId)
   }
 
   encode (buf, offset) {

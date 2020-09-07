@@ -1,11 +1,18 @@
 const assert = require('nanoassert')
 const curve = require('./lib/curve')
-const schnorr = require('./lib/schnorr-proof')
+const hash = require('./lib/challenge')
 const attributes = require('./lib/gen-attributes')
+const { verify } = require('./lib/schnorr-proof')
 const { IssuanceSetup, IssuanceResponse } = require('./wire')
 
 const rand = curve.randomScalar
 const G1 = curve.G1
+
+const opsG1 = {
+  add: (a, b) => G1.add(a, b),
+  mul: (a, b) => G1.mulScalar(a, b),
+  eq: (a, b) => G1.eq(a, b)
+}
 
 module.exports = IssuingProtocol
 
@@ -31,8 +38,11 @@ function IssuingProtocol (keys, attr) {
 
 function respond (keys, attr, S_) {
   return (res) => {
-    const prover = schnorr.prover([res.S, res.S0])
-    assert(prover.verify(res.R, res.proof), 'commitment to R fails validation.')
+    const challenge = hash(res.S, res.S0)
+
+    const proof = res.proof
+    assert(verify([res.S, res.S0], res.R, proof, proof.blinds, challenge),
+      'commitment to R fails validation.')
 
     const inv_a = curve.F.inv(keys.sk.a)
     const K = G1.mulScalar(res.S, inv_a)

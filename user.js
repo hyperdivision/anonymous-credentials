@@ -50,10 +50,8 @@ module.exports = class User {
 
   present (attributes, certId) {
     const id = this.findId(attributes, certId)
-    const presentation = id.present(attributes)
-    presentation.certId = id.certId
+    return id.present(attributes)
 
-    return presentation
     return presentation.encode()
   }
 

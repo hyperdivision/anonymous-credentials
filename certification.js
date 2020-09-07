@@ -2,7 +2,8 @@ const assert = require('nanoassert')
 const keys = require('./lib/keygen')
 const sodium = require('sodium-native')
 const RevocationList = require('./revocation-list')
-const { Revoker, Identifier } = require('./experiment/revoker')
+const Revoker = require('./lib/revoker')
+const Identifier = require('./lib/identifier')
 const IssuingProtocol = require('./issuance.js')
 const inspect = Symbol.for('nodejs.util.inspect.custom');
 const curve = require('./lib/curve')
@@ -85,10 +86,7 @@ class PrivateCertification {
       curve.G1.eq(c.revocationPoint, toRevoke))
 
     const revinfo = this.revoker.revoke(revokeUser.identifier.y)
-    // this.revocationList.add({
-    //   newValue: this.revoker.acc.current,
-    //   revoked: revokeUser
-    // }, cb)
+    // this.revocationList.add(revinfo, cb)
 
     return cb(null, revinfo)
   }

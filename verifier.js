@@ -4,7 +4,7 @@ const RevocationList = require('./revocation-list')
 const { verifyCredential, verifyWitness } = require('./lib/verify')
 const attributes = require('./lib/gen-attributes')
 const { Presentation } = require('./wire')
-const hash = require('./experiment/challenge')
+const hash = require('./lib/challenge')
 const { PublicCertification } = require('./certification')
 
 module.exports = class Verifier {
@@ -14,16 +14,16 @@ module.exports = class Verifier {
   }
 
   validate (buf, cb) {
-    const { cred, witness, certId } = buf
-    // const { cred, witness, certId } = Presentation.decode(buf)
+    const { showing, witness, disclosed, certId } = buf
+    // const { showing, witness, certId } = Presentation.decode(buf)
 
     const cert = this.certifications[certId]
 
     if (cert === undefined) return cb(new Error('certification not recognised.'))
 
-    const index = Object.keys(cred.disclosed).map(k => Object.keys(cert.schema).indexOf(k) + 1)
-    const undisclosed = cred._S.filter((_, i) => !index.includes(i))
-    const generators = [cred.C_, cred.S_, ...undisclosed]
+    const index = Object.keys(disclosed).map(k => Object.keys(cert.schema).indexOf(k) + 1)
+    const undisclosed = showing._S.filter((_, i) => !index.includes(i))
+    const generators = [showing.C_, showing.S_, ...undisclosed]
 
     const challenge = hash(...generators, ...witness.U, witness.C)
 
@@ -32,9 +32,9 @@ module.exports = class Verifier {
       return cb(new Error('credential has been revoked'))
     }
 
-    const disclosure = Object.entries(cred.disclosed).map(format)
+    const disclosure = Object.entries(disclosed).map(format)
 
-    if (!verifyCredential(cred, cert.pk.credential, disclosure, challenge, generators)) {
+    if (!verifyCredential(showing, cert.pk.credential, disclosure, challenge, generators)) {
       return cb(new Error('credential cannot be verified'))
     }
 
