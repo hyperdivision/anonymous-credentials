@@ -92,14 +92,14 @@ module.exports = class Credential {
     function prove (challenge) {
       const proof = schnorr.prove(generators, secrets, challenge)
 
-      return {
+      return new Showing({
         K_,
         S_,
         _S,
         C_,
         T_,
         proof
-      }
+      })
     }
   }
 

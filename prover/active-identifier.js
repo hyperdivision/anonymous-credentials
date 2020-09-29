@@ -77,7 +77,7 @@ module.exports = class ActiveIdentifier extends Identifier {
       proofs.push(genProof([g0, g1], [1, 2]))
       proofs.push(genProof(generatorsF12, [0, 3, 7, 1], optsF12))
 
-      return new WitnessProof(U, C, C1, C2, proofs, blinds)
+      return new WitnessProof({ U, C, C1, C2, proofs, blinds })
     }
     
     function genProof (generators, indices, { add, mul, enc } = optsG1) {

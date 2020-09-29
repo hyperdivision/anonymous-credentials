@@ -50,7 +50,7 @@ module.exports = class User {
 
   present (attributes, certId) {
     const id = this.findId(attributes, certId)
-    return id.present(attributes)
+    const presentation = id.present(attributes)
 
     return presentation.encode()
   }

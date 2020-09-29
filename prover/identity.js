@@ -36,14 +36,12 @@ module.exports = class Identity {
     const witness = nym.prove(cred.secrets[2], challenge)
     const showing = cred.prove(challenge)
 
-    return {
+    return new Presentation({
       disclosed,
       showing,
       witness,
       certId: this.certId
-    }
-
-    // return new Presentation(disclosed, showing, witness, this.certId)
+    })
   }
 
   encode (buf, offset) {

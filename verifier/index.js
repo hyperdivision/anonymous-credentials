@@ -13,8 +13,7 @@ module.exports = class Verifier {
   }
 
   validate (buf, cb) {
-    const { showing, witness, disclosed, certId } = buf
-    // const { showing, witness, certId } = Presentation.decode(buf)
+    const { showing, witness, disclosed, certId } = Presentation.decode(buf)
 
     const cert = this.certifications[certId]
 

@@ -1,10 +1,10 @@
-const curve = require('../../lib/curve')
-const hash = require('../../lib/challenge')
+const curve = require('../lib/curve')
+const hash = require('../lib/challenge')
 const assert = require('nanoassert')
-const { verifyWitness } = require('../../lib/verify')
+const { verifyWitness } = require('../lib/verify')
 const Accumulator = require('./accumulator')
-const { AccumulatorPublicKey } = require('../../lib/keygen')
-const { WitnessProo, Identifier } = require('../../lib/wire')
+const { AccumulatorPublicKey } = require('../lib/keygen')
+const { WitnessProo, Identifier } = require('../lib/wire')
 
 const { F, F12, G1, G2 } = curve
 
