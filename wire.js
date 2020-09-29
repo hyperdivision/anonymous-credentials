@@ -170,6 +170,8 @@ const AccumulatorPublicKey = module.exports.AccumulatorPublicKey = class Accumul
     this.e.vg = curve.pairing(this.currentAccumulator, this.g2)
     this.e.hg = curve.pairing(this.h, this.g2)
     this.e.ha = curve.pairing(this.h, this.a)
+    this.e.g1a = curve.pairing(this.basepoints[1], this.a)
+    this.e.g1g2 = curve.pairing(this.basepoints[1], this.g2)
   }
 
   encode (buf, offset) {
