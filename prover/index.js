@@ -1,9 +1,9 @@
-const curve = require('./lib/curve')
+const curve = require('../lib/curve')
 const Identity = require('./identity')
 const credential = require('./credential')
-const keys = require('./lib/keygen')
+const keys = require('../lib/keygen')
 const crypto = require('crypto')
-const { Application, SetupMessage, ObtainMessage, StoreMessage } = require('./wire')
+const { Application, SetupMessage, ObtainMessage, StoreMessage } = require('../lib/wire')
 
 module.exports = class User {
   constructor () {

@@ -1,6 +1,6 @@
 const util = require('util')
 const Issuer = require('./issuer')
-const User = require('./user')
+const User = require('./prover')
 const Verifier = require('./verifier')
 const curve = require('./lib/curve')
 

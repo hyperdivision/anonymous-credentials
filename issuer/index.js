@@ -1,8 +1,8 @@
 const assert = require('nanoassert')
-const curve = require('./lib/curve')
-const credential = require('./credential')
-const keys = require('./lib/keygen')
-const { Application, SetupMessage, ObtainMessage, StoreMessage } = require('./wire')
+const curve = require('../lib/curve')
+const credential = require('../prover/credential')
+const keys = require('../lib/keygen')
+const { Application, SetupMessage, ObtainMessage, StoreMessage } = require('../lib/wire')
 const { PrivateCertification } = require('./certification')
 
 module.exports = class Issuer {

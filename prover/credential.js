@@ -1,7 +1,7 @@
-const curve = require('./lib/curve')
-const hash = require('./lib/challenge')
-const schnorr = require('./lib/schnorr-proof')
-const { ObtainInfo, Showing } = require('./wire')
+const curve = require('../lib/curve')
+const hash = require('../lib/challenge')
+const schnorr = require('../lib/schnorr-proof')
+const { ObtainInfo, Showing } = require('../lib/wire')
 
 const G1 = curve.G1
 const F = curve.F

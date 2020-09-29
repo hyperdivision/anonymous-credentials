@@ -1,12 +1,15 @@
 const assert = require('nanoassert')
-const keys = require('./lib/keygen')
+const keys = require('../lib/keygen')
 const sodium = require('sodium-native')
-const RevocationList = require('./revocation-list')
+const RevocationList = require('../revocation-list')
 const Revoker = require('./lib/revoker')
-const Identifier = require('./lib/identifier')
 const IssuingProtocol = require('./issuance.js')
 const inspect = Symbol.for('nodejs.util.inspect.custom');
-const curve = require('./lib/curve')
+const curve = require('../lib/curve')
+const { PublicCertification, Identifier } = require('../lib/wire')
+const { CertificatePublicKey } = require('../lib/keygen')
+
+const rand = curve.randomScalar
 
 const hasProperty = Object.prototype.hasOwnProperty
 
@@ -26,11 +29,11 @@ class PrivateCertification {
   init (opts, cb) {
     if (!this.certId) this.certId = shasum(Buffer.from(JSON.stringify(this.schema))).toString('hex')
 
-    this.keys.cert = opts.issuingKeys || keys.issuingKeys.generate(Object.keys(this.schema).length + 1)
-    this.keys.pk = {
+    this.keys.cert = opts.issuingKeys || new CertificateKeys(Object.keys(this.schema).length + 1)
+    this.keys.pk = new keys.CertificatePublicKey({
       acc: this.revoker.pubkey,
       credential: this.keys.cert.pk
-    }
+    })
 
     // this.revocationList = new RevocationList(opts.storage, this.certId)
     // this.revocationList.create(cb)
@@ -111,8 +114,8 @@ class PrivateCertification {
     this.revoker.encode(buf, offset)
     offset += this.revoker.encode.bytes
 
-    keys.issuingKeys.encode(this.keys.cert, buf, offset)
-    offset += keys.issuingKeys.encode.bytes
+    this.keys.cert.encode(buf, offset)
+    offset += this.keys.cert.encode.bytes
 
     const serializedSchema = Buffer.from(JSON.stringify(this.schema))
     buf.writeUInt32LE(serializedSchema.byteLength, offset)
@@ -131,7 +134,7 @@ class PrivateCertification {
     for (let cred of this.credentials) len += cred.encodingLength()
     len += 32
     len += this.revoker.encodingLength()
-    len += keys.issuingKeysEncodingLength(this.keys.cert)
+    len += this.keys.cert.encodingLength()
     len += 4
     len += Buffer.from(JSON.stringify(this.schema)).byteLength
 
@@ -160,8 +163,8 @@ class PrivateCertification {
     opts.revoker = Revoker.decode(buf, offset)
     offset += Revoker.decode.bytes
 
-    opts.issuingKeys = keys.issuingKeys.decode(buf, offset)
-    offset += keys.issuingKeys.decode.bytes
+    opts.issuingKeys = CertificateKeys.decode(buf, offset)
+    offset += CertificateKeys.decode.bytes
 
     const schemaLen = buf.readUInt32LE(offset)
     offset += 4
@@ -171,83 +174,6 @@ class PrivateCertification {
 
     PrivateCertification.decode.bytes = offset - startIndex
     return new PrivateCertification(opts)
-  }
-}
-
-class PublicCertification {
-  constructor (opts) {
-    this.pk = opts.pk
-    this.certId = opts.certId
-    this.revocationListKey = opts.revocationListKey
-    this.schema = opts.schema
-  }
-
-  validate (application) {
-    for (const [field, type] of Object.entries(this.schema)) {
-      check(Object.prototype.hasOwnProperty.call(application, field), `${field} is required.`)
-      check(typeof application[field] === type)
-    }
-  }
-
-  encode (buf, offset) {
-    const serializedSchema = Buffer.from(JSON.stringify(this.schema))
-
-    if (!buf) buf = Buffer.alloc(this.encodingLength())
-    if (!offset) offset = 0
-    const startIndex = offset
-
-    keys.encodeCertKeys(this.pk, buf, offset)
-    offset += keys.encodeCertKeys.bytes
-
-    buf.write(this.certId, offset, 'hex')
-    offset += this.certId.length / 2
-
-    buf.set(this.revocationListKey, offset)
-    offset += this.revocationListKey.byteLength
-
-    buf.writeUInt32LE(serializedSchema.byteLength, offset)
-    offset += 4
-
-    buf.set(serializedSchema, offset)
-    offset += serializedSchema.byteLength
-
-    this.encode.bytes = startIndex - offset
-    return buf
-  }
-
-  static decode (buf, offset) {
-    if (!offset) offset = 0
-    const startIndex = offset
-
-    const opts = {}
-
-    opts.pk = keys.decodeCertKeys(buf, offset)
-    offset += keys.decodeCertKeys.bytes
-
-    opts.certId = buf.subarray(offset, offset + 32).toString('hex')
-    offset += 32
-
-    opts.revocationListKey = buf.subarray(offset, offset + 32)
-    offset += 32
-
-    const schemaLen = buf.readUInt32LE(offset)
-    offset += 4
-
-    opts.schema = JSON.parse(buf.subarray(offset, offset + schemaLen).toString())
-    offset += schemaLen
-
-    PublicCertification.decode.bytes = offset - startIndex
-    return new PublicCertification(opts)
-  }
-
-  encodingLength () {
-    let len = 0
-
-    len += keys.certKeysEncodingLength(this.pk)
-    len += 68
-    len += Buffer.from(JSON.stringify(this.schema)).byteLength
-
-    return len
   }
 }
 
@@ -318,4 +244,92 @@ function shasum (data) {
 module.exports = {
   PrivateCertification,
   PublicCertification
+}
+
+class CertificateKeys {
+  constructor (n) {
+    this.sk = {}
+    this.pk = {}
+
+    this.sk.a = rand()
+    this.sk.z = rand()
+
+    this.sk._a = []
+    for (let i = 0; i < n; i++) this.sk._a[i] = rand()
+
+    this.pk = new keys.CredentialPublicKey()
+
+    // Q is just a random generator, so don't store discrete log
+    this.pk.Q = curve.mulGenG2(rand())
+    this.pk.A = curve.G2.mulScalar(this.pk.Q, this.sk.a)
+    this.pk.Z = curve.G2.mulScalar(this.pk.Q, this.sk.z)
+    this.pk._A = this.sk._a.map(k => curve.G2.mulScalar(this.pk.Q, k))
+
+  }
+
+  encode (buf, offset) {
+    if (!buf) buf = Buffer.alloc(this.encodingLength())
+    if (!offset) offset = 0
+    const startIndex = offset
+
+    curve.encodeScalar(this.sk.a, buf, offset)
+    offset += curve.encodeScalar.bytes
+
+    buf.writeUInt32LE(this.sk._a.length, offset)
+    offset += 4
+
+    for (const k of this.sk._a) {
+      curve.encodeScalar(k, buf, offset)
+      offset += curve.encodeScalar.bytes
+    }
+
+    curve.encodeScalar(this.sk.z, buf, offset)
+    offset += curve.encodeScalar.bytes
+
+    curve.encodeG2(this.pk.Q, buf, offset)
+    offset += curve.encodeG2.bytes
+
+    this.encode.bytes = offset - startIndex
+    return buf
+  }
+
+  static decode (buf, offset) {
+    if (!offset) offset = 0
+    const startIndex = offset
+
+    const keys = new CredentialKeys()
+
+    keys.sk.a = curve.decodeScalar(buf, offset)
+    offset += curve.decodeScalar.bytes
+
+    const aLen = buf.readUInt32LE(offset)
+    offset += 4
+
+    keys.sk._a = new Array(aLen)
+    for (let i = 0; i < aLen; i++) {
+      keys.sk._a[i] = curve.decodeScalar(buf, offset)
+      offset += curve.decodeScalar.bytes
+    }
+
+    keys.sk.z = curve.decodeScalar(buf, offset)
+    offset += curve.decodeScalar.bytes
+
+    keys.pk.Q = curve.decodeG2(buf, offset)
+    offset += curve.encodeG2.bytes
+
+    keys.pk.A = G2.mulScalar(keys.pk.Q, keys.sk.a)
+    keys.pk.Z = G2.mulScalar(keys.pk.Q, keys.sk.z)
+    keys.pk._A = keys.sk._a.map(k => G2.mulScalar(keys.pk.Q, k))
+
+    CertificateKeys.decode.bytes = offset - startIndex
+    return keys
+  }
+
+  encodingLength () {
+    return 192 + 4 + 32 * (2 + this.sk._a.length)
+  }
+
+  toPublicKey (buf, offset) {
+    return this.pk.encode(buf, offset)
+  }
 }

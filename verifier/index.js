@@ -1,11 +1,10 @@
 const assert = require('nanoassert')
 const sodium = require('sodium-native')
-const RevocationList = require('./revocation-list')
-const { verifyCredential, verifyWitness } = require('./lib/verify')
-const attributes = require('./lib/gen-attributes')
-const { Presentation } = require('./wire')
-const hash = require('./lib/challenge')
-const { PublicCertification } = require('./certification')
+const RevocationList = require('../revocation-list')
+const { verifyCredential, verifyWitness } = require('../lib/verify')
+const attributes = require('../lib/gen-attributes')
+const { Presentation, PublicCertification } = require('../lib/wire')
+const hash = require('../lib/challenge')
 
 module.exports = class Verifier {
   constructor (storage) {

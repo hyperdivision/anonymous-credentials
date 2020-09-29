@@ -1,5 +1,5 @@
 const assert = require('nanoassert')
-const curve = require('./curve')
+const curve = require('../../lib/curve')
 const { F, F12, G1, G2 } = curve
 
 module.exports = class Accumulator {

@@ -1,9 +1,9 @@
 const assert = require('nanoassert')
-const curve = require('./lib/curve')
-const hash = require('./lib/challenge')
-const attributes = require('./lib/gen-attributes')
-const { verify } = require('./lib/schnorr-proof')
-const { IssuanceSetup, IssuanceResponse } = require('./wire')
+const curve = require('../lib/curve')
+const hash = require('../lib/challenge')
+const attributes = require('../lib/gen-attributes')
+const { verify } = require('../lib/schnorr-proof')
+const { IssuanceSetup, IssuanceResponse } = require('../lib/wire')
 
 const rand = curve.randomScalar
 const G1 = curve.G1
