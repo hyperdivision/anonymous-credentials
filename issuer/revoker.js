@@ -1,32 +1,31 @@
 const curve = require('../lib/curve')
-const hash = require('../lib/challenge')
 const assert = require('nanoassert')
 const { verifyWitness } = require('../lib/verify')
 const Accumulator = require('./accumulator')
 const { AccumulatorPublicKey } = require('../lib/keygen')
-const { WitnessProo, Identifier } = require('../lib/wire')
+const { Identifier, RevocationInfo } = require('../lib/wire')
 
-const { F, F12, G1, G2 } = curve
+const { G1 } = curve
 
 module.exports = class Revoker {
   constructor (opts = { secrets: {} }) {
     this.acc = opts.acc || new Accumulator()
     this.users = opts.users || []
     this.revoked = opts.revoked || []
-    
+
     this.secrets = {}
     this.secrets.alpha = this.acc.alpha
     this.secrets.xi1 = opts.secrets.xi1 || curve.randomScalar()
     this.secrets.xi2 = opts.secrets.xi2 || curve.randomScalar()
 
-    this.pubkey = new AccumulatorPublicKey({
+    this.pubkey = opts.pubkey || new AccumulatorPublicKey({
       g1: this.acc.g1,
       g2: this.acc.g2,
       secrets: this.secrets,
       current: this.acc.current
     })
 
-    this.history = [[ this.acc.current, Date.now() ]]
+    this.history = [[this.acc.current, Date.now()]]
   }
 
   issueIdentifier (k) {
@@ -35,7 +34,7 @@ module.exports = class Revoker {
     const id = this.acc.new(k)
 
     const identifier = new Identifier(id, this.pubkey)
-    this.users.push(id)
+    this.users.push(identifier)
 
     return identifier
   }
@@ -68,15 +67,12 @@ module.exports = class Revoker {
 
     this.acc.add(y)
 
-    this.history.push([ this.acc.current, Date.now() ])
+    this.history.push([this.acc.current, Date.now()])
 
     this.pubkey.acc = this.acc.current
     this.pubkey.e.vg = curve.pairing(this.acc.current, this.pubkey.g2)
 
-    return {
-      acc,
-      y
-    }
+    return new RevocationInfo({ acc, y, updatedAcc: this.acc.current })
   }
 
   getPubkey () {
@@ -104,7 +100,10 @@ module.exports = class Revoker {
     offset += curve.encodeScalar.bytes
 
     curve.encodeScalar(this.secrets.xi2, buf, offset)
-    offset += curve.encodeScalar.bytes 
+    offset += curve.encodeScalar.bytes
+
+    this.pubkey.encode(buf, offset)
+    offset += this.pubkey.encode.bytes
 
     this.encode.bytes = offset - startIndex
     return buf
@@ -133,9 +132,12 @@ module.exports = class Revoker {
     offset += curve.decodeScalar.bytes
 
     opts.secrets.xi2 = curve.decodeScalar(buf, offset)
-    offset += curve.decodeScalar.bytes 
+    offset += curve.decodeScalar.bytes
 
-    this.encode.bytes = offset - startIndex
+    opts.pubkey = AccumulatorPublicKey.decode(buf, offset)
+    offset += AccumulatorPublicKey.decode.bytes
+
+    Revoker.decode.bytes = offset - startIndex
     return new Revoker(opts)
   }
 
@@ -144,8 +146,10 @@ module.exports = class Revoker {
 
     len += this.acc.encodingLength()
     len += 8
-    for (let user of this.users) len += user.encodingLength()
-    for (let user of this.revoked) len += user.encodingLength()
+
+    for (const user of this.users) len += user.encodingLength()
+    for (const user of this.revoked) len += user.encodingLength()
+    len += this.pubkey.encodingLength()
     len += 160
 
     return len
@@ -160,7 +164,7 @@ function encodeUserArray (arr, buf, offset) {
   buf.writeUInt32LE(arr.length, offset)
   offset += 4
 
-  for (let item of arr) {
+  for (const item of arr) {
     item.encode(buf, offset)
     offset += item.encode.bytes
   }
@@ -178,8 +182,8 @@ function decodeUserArray (buf, offset) {
   offset += 4
 
   for (let i = 0; i < len; i++) {
-    arr.push(User.decode(buf, offset))
-    offset += User.decode.bytes
+    arr.push(Identifier.decode(buf, offset))
+    offset += Identifier.decode.bytes
   }
 
   decodeUserArray.bytes = offset - startIndex

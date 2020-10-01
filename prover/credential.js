@@ -22,7 +22,7 @@ module.exports = class Credential {
     const alpha = rand()
     this.kappa = rand()
 
-    init.k.forEach((val, i) => this.k[i] = val)
+    init.k.forEach((val, i) => { this.k[i] = val })
 
     this.S = G1.mulScalar(init.S_, alpha)
     this._S[0] = G1.mulScalar(init.S0_, alpha)
@@ -46,7 +46,7 @@ module.exports = class Credential {
     this.kappa = F.normalize(F.add(this.kappa, final.kappa))
     this.K = final.K
 
-    final._S.forEach((val , i) => this._S[i + 1] = val)
+    final._S.forEach((val, i) => { this._S[i + 1] = val })
     this.T = final.T
 
     this.C = this._S.reduce(accumulator, mulAdd(this.K, this.S, this.kappa))
@@ -111,7 +111,7 @@ module.exports = class Credential {
     buf.writeUInt32LE(this.k.length, offset)
     offset += 4
 
-    for (let k of this.k) {
+    for (const k of this.k) {
       curve.encodeScalar(k, buf, offset)
       offset += curve.encodeScalar.bytes
     }
@@ -125,7 +125,7 @@ module.exports = class Credential {
     curve.encodeG1(this.S, buf, offset)
     offset += curve.encodeG1.bytes
 
-    for (let S of this._S) {
+    for (const S of this._S) {
       curve.encodeG1(S, buf, offset)
       offset += curve.encodeG1.bytes
     }

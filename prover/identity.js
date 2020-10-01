@@ -1,8 +1,5 @@
-const assert = require('nanoassert')
-const sodium = require('sodium-native')
-const keygen = require('../lib/keygen')
 const Credential = require('./credential')
-const { Presentation, Signature } = require('../lib/wire')
+const { Presentation } = require('../lib/wire')
 const Identifier = require('./active-identifier')
 const attributes = require('../lib/gen-attributes')
 const hash = require('../lib/challenge')
@@ -22,7 +19,7 @@ module.exports = class Identity {
 
   present (disclosure) {
     const disclosed = {}
-    for (let item of disclosure) disclosed[item] = this.attributes[item]
+    for (const item of disclosure) disclosed[item] = this.attributes[item]
 
     // TODO: validate against credential
     const encoded = Object.entries(disclosed).map(([k, v]) =>
@@ -42,6 +39,10 @@ module.exports = class Identity {
       witness,
       certId: this.certId
     })
+  }
+
+  updateWitness (info) {
+    this.identifier.update(info)
   }
 
   encode (buf, offset) {

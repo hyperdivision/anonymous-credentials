@@ -1,9 +1,6 @@
-const curve = require('../lib/curve')
 const Identity = require('./identity')
-const credential = require('./credential')
-const keys = require('../lib/keygen')
 const crypto = require('crypto')
-const { Application, SetupMessage, ObtainMessage, StoreMessage } = require('../lib/wire')
+const { Application, SetupMessage, ObtainMessage, StoreMessage, RevocationInfo } = require('../lib/wire')
 
 module.exports = class User {
   constructor () {
@@ -60,6 +57,12 @@ module.exports = class User {
     return subset.find(id => hasAttributes(id.attributes, required))
   }
 
+  updateNonRevocationWitnesses (revinfo) {
+    const info = RevocationInfo.decode(revinfo)
+
+    this.identities.filter(id => id.certId === info.certId).forEach(id => id.updateWitness(info))
+  }
+
   encode (buf, offset) {
     if (!buf) buf = Buffer.alloc(this.encodingLength())
     if (!offset) offset = 0
@@ -68,7 +71,7 @@ module.exports = class User {
     buf.writeUInt32LE(this.identities.length, offset)
     offset += 4
 
-    for (let id of this.identities) {
+    for (const id of this.identities) {
       id.encode(buf, offset)
       offset += id.encode.bytes
     }
@@ -79,7 +82,7 @@ module.exports = class User {
 
   encodingLength () {
     let len = 4
-    for (let id of this.identities) len += id.encodingLength()
+    for (const id of this.identities) len += id.encodingLength()
 
     return len
   }
@@ -103,7 +106,7 @@ module.exports = class User {
   }
 }
 
-function hasAttributes(id, attrs) {
+function hasAttributes (id, attrs) {
   return attrs.reduce((b, a) => b && Object.prototype.hasOwnProperty.call(id, a))
 }
 

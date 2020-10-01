@@ -3,7 +3,7 @@ const curve = require('../lib/curve')
 const { F, F12, G1, G2 } = curve
 
 module.exports = class Accumulator {
-  constructor ({ g1, g2, product, alpha } = {}) {
+  constructor ({ g1, g2, product, alpha, init = true } = {}) {
     this.alpha = alpha || curve.randomScalar()
 
     this.g1 = g1 || curve.randomPointG1()
@@ -13,8 +13,10 @@ module.exports = class Accumulator {
     this.product = product || F.one
     this.current = G1.mulScalar(this.g1, this.product)
 
-    this.add(curve.randomScalar())
-    this.add(curve.randomScalar())
+    if (init) {
+      this.add(curve.randomScalar())
+      this.add(curve.randomScalar())
+    }
   }
 
   new (y) {
@@ -53,9 +55,9 @@ module.exports = class Accumulator {
   verifyWitness (w, y) {
     const g_yg_a = G2.mulScalar(this.g2, F.add(y, this.alpha))
 
-    const pair1 =  curve.pairing(w.c, g_yg_a)
+    const pair1 = curve.pairing(w.c, g_yg_a)
     const pair_d = F12.exp(this.e, w.d)
-    
+
     const lhs = F12.mul(pair1, pair_d)
     const rhs = curve.pairing(this.current, this.g2)
 
@@ -100,6 +102,8 @@ module.exports = class Accumulator {
 
     opts.product = curve.decodeScalar(buf, offset)
     offset += curve.decodeScalar.bytes
+
+    opts.init = false
 
     Accumulator.decode.bytes = offset - startIndex
     return new Accumulator(opts)

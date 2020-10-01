@@ -1,20 +1,16 @@
-const assert = require('nanoassert')
 const keys = require('../lib/keygen')
 const sodium = require('sodium-native')
 const RevocationList = require('../revocation-list')
 const Revoker = require('./revoker')
 const IssuingProtocol = require('./issuance.js')
-const inspect = Symbol.for('nodejs.util.inspect.custom');
 const curve = require('../lib/curve')
-const { PublicCertification, Identifier } = require('../lib/wire')
-const { CertificatePublicKey } = require('../lib/keygen')
+const { Identifier } = require('../lib/wire')
+const PublicCertification = require('../lib/public-certification')
 
 const rand = curve.randomScalar
 
-const hasProperty = Object.prototype.hasOwnProperty
-
 class PrivateCertification {
-   constructor (opts = {}) {
+  constructor (opts = {}) {
     this.schema = opts.schema
     this.credentials = opts.credentials || []
     this.certId = opts.certId || null
@@ -90,9 +86,10 @@ class PrivateCertification {
       curve.G1.eq(c.revocationPoint, toRevoke))
 
     const revinfo = this.revoker.revoke(revokeUser.identifier.y)
+    revinfo.certId = this.certId
     // this.revocationList.add(revinfo, cb)
 
-    return cb(null, revinfo)
+    return cb(null, revinfo.encode())
   }
 
   encode (buf, offset) {
@@ -108,7 +105,7 @@ class PrivateCertification {
       offset += cred.encode.bytes
     }
 
-    buf.set(this.certId, offset)
+    buf.write(this.certId, offset, 'hex')
     offset += 32
 
     this.revoker.encode(buf, offset)
@@ -131,7 +128,7 @@ class PrivateCertification {
   encodingLength () {
     let len = 4
 
-    for (let cred of this.credentials) len += cred.encodingLength()
+    for (const cred of this.credentials) len += cred.encodingLength()
     len += 32
     len += this.revoker.encodingLength()
     len += this.keys.cert.encodingLength()
@@ -157,7 +154,7 @@ class PrivateCertification {
       offset += RegisteredCredential.decode.bytes
     }
 
-    opts.certId = buf.subarray(offset, offset + 32)
+    opts.certId = buf.subarray(offset, offset + 32).toString('hex')
     offset += 32
 
     opts.revoker = Revoker.decode(buf, offset)
@@ -199,6 +196,9 @@ class RegisteredCredential {
     this.identifier.encode(buf, offset)
     offset += this.identifier.encode.bytes
 
+    curve.encodeG1(this.revocationPoint, buf, offset)
+    offset += curve.encodeG1.bytes
+
     this.encode.bytes = offset - startIndex
     return buf
   }
@@ -207,6 +207,7 @@ class RegisteredCredential {
     let len = 4
     len += Buffer.from(JSON.stringify(this.attr)).byteLength
     len += this.identifier.encodingLength()
+    len += curve.encodingLengthG1()
 
     return len
   }
@@ -226,8 +227,11 @@ class RegisteredCredential {
     opts.identifier = Identifier.decode(buf, offset)
     offset += Identifier.decode.bytes
 
+    opts.revocationPoint = curve.decodeG1(buf, offset)
+    offset += curve.decodeG1.bytes
+
     RegisteredCredential.decode.bytes = offset - startIndex
-    return new Credential(opts)
+    return new RegisteredCredential(opts)
   }
 }
 
@@ -264,7 +268,6 @@ class CertificateKeys {
     this.pk.A = curve.G2.mulScalar(this.pk.Q, this.sk.a)
     this.pk.Z = curve.G2.mulScalar(this.pk.Q, this.sk.z)
     this.pk._A = this.sk._a.map(k => curve.G2.mulScalar(this.pk.Q, k))
-
   }
 
   encode (buf, offset) {
@@ -297,7 +300,7 @@ class CertificateKeys {
     if (!offset) offset = 0
     const startIndex = offset
 
-    const keys = new CredentialKeys()
+    const keys = new CertificateKeys()
 
     keys.sk.a = curve.decodeScalar(buf, offset)
     offset += curve.decodeScalar.bytes
@@ -317,9 +320,9 @@ class CertificateKeys {
     keys.pk.Q = curve.decodeG2(buf, offset)
     offset += curve.encodeG2.bytes
 
-    keys.pk.A = G2.mulScalar(keys.pk.Q, keys.sk.a)
-    keys.pk.Z = G2.mulScalar(keys.pk.Q, keys.sk.z)
-    keys.pk._A = keys.sk._a.map(k => G2.mulScalar(keys.pk.Q, k))
+    keys.pk.A = curve.G2.mulScalar(keys.pk.Q, keys.sk.a)
+    keys.pk.Z = curve.G2.mulScalar(keys.pk.Q, keys.sk.z)
+    keys.pk._A = keys.sk._a.map(k => curve.G2.mulScalar(keys.pk.Q, k))
 
     CertificateKeys.decode.bytes = offset - startIndex
     return keys

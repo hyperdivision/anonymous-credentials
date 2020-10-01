@@ -1,7 +1,7 @@
 const curve = require('../lib/curve')
 const { Identifier, SimpleProof, WitnessProof } = require('../lib/wire')
 
-const { G1, G2, F, F12 } = curve
+const { G1, F, F12 } = curve
 
 const optsG1 = {
   add: (a, b) => G1.add(a, b),
@@ -16,10 +16,6 @@ const optsF12 = {
 }
 
 module.exports = class ActiveIdentifier extends Identifier {
-  constructor (identity, pk) {
-    super(identity, pk)
-  }
-
   prover () {
     const self = this
 
@@ -50,13 +46,15 @@ module.exports = class ActiveIdentifier extends Identifier {
 
     return {
       U,
-      C, C1, C2,
+      C,
+      C1,
+      C2,
       prove
     }
 
     function prove (k, challenge) {
       const proofs = []
-    
+
       allSecrets[1] = k
       const blinds = allScalars.map((s, i) => F.add(s, F.mul(challenge, allSecrets[i])))
 
@@ -79,10 +77,9 @@ module.exports = class ActiveIdentifier extends Identifier {
 
       return new WitnessProof({ U, C, C1, C2, proofs, blinds })
     }
-    
+
     function genProof (generators, indices, { add, mul, enc } = optsG1) {
       const scalars = indices.map(i => allScalars[i])
-      const secrets = indices.map(i => allSecrets[i])
 
       const products = generators.map((g, i) => mul(g, scalars[i]))
       const P_ = products.reduce((acc, el) => add(acc, el))

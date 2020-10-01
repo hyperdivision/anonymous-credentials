@@ -3,16 +3,10 @@ const curve = require('../lib/curve')
 const hash = require('../lib/challenge')
 const attributes = require('../lib/gen-attributes')
 const { verify } = require('../lib/schnorr-proof')
-const { IssuanceSetup, IssuanceResponse } = require('../lib/wire')
+const { IssuanceSetup, IssuanceResponse } = require('../LIB/wire')
 
 const rand = curve.randomScalar
 const G1 = curve.G1
-
-const opsG1 = {
-  add: (a, b) => G1.add(a, b),
-  mul: (a, b) => G1.mulScalar(a, b),
-  eq: (a, b) => G1.eq(a, b)
-}
 
 module.exports = IssuingProtocol
 
@@ -32,7 +26,7 @@ function IssuingProtocol (keys, attr) {
   return {
     setup,
     attr,
-    response,
+    response
   }
 }
 
