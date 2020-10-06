@@ -1,18 +1,17 @@
 const curve = require('../lib/curve')
 const { Identifier, SimpleProof, WitnessProof } = require('../lib/wire')
+const schnorr = require('../lib/schnorr-proof')
 
 const { G1, F, F12 } = curve
 
 const optsG1 = {
-  add: (a, b) => G1.add(a, b),
-  mul: (a, b) => G1.mulScalar(a, b),
-  eq: (a, b) => G1.eq(a, b)
+  add: (a, b) => a.add(b),
+  mul: (a, b) => a.multiply(b),
 }
 
 const optsF12 = {
-  add: (a, b) => F12.mul(a, b),
-  mul: (a, b) => F12.exp(a, b),
-  eq: (a, b) => F12.eq(a, b)
+  add: (a, b) => a.multiply(b),
+  mul: (a, b) => a.pow(b.value),
 }
 
 module.exports = class ActiveIdentifier extends Identifier {
@@ -21,28 +20,30 @@ module.exports = class ActiveIdentifier extends Identifier {
 
     const [g0, g1, g2, g3, g4] = this.pk.basepoints
 
-    const blind = [null, null].map(curve.randomScalar)
-    const blindSum = F.add(blind[0], blind[1])
+    const blind = [null, null].map(curve.Fr.random)
+    const blindSum = blind[0].add(blind[1])
 
-    const C1 = G1.affine(G1.mulScalar(this.pk.u, blind[0]))
-    const C2 = G1.affine(G1.mulScalar(this.pk.v, blind[1]))
-    const C = G1.affine(G1.add(G1.mulScalar(g0, this.y), G1.mulScalar(g1, blindSum)))
+    const C1 = this.pk.u.multiply(blind[0]).normalize()
+    const C2 = this.pk.v.multiply(blind[1]).normalize()
+    const C = g0.multiply(this.y).add(g1.multiply(blindSum)).normalize()
 
     const beta = []
-    for (let i = 0; i < 4; i++) beta.push(curve.randomScalar())
+    for (let i = 0; i < 4; i++) beta.push(curve.Fr.random())
 
-    const delta = beta.map(n => F.mul(n, this.y))
-    delta[2] = F.mul(this.w.d, beta[2])
-    delta[3] = F.mul(this.w.d, beta[3])
+    const delta = beta.map(n => n.multiply(this.y))
+    delta[2] = this.w.d.multiply(beta[2])
+    delta[3] = this.w.d.multiply(beta[3])
 
     const U = []
-    U[0] = G1.affine(G1.add(G1.mulScalar(g0, beta[0]), G1.mulScalar(g1, beta[1])))
-    U[1] = G1.affine(G1.add(this.w.c, G1.mulScalar(g1, beta[0])))
-    U[2] = G1.affine(G1.add(G1.mulScalar(g2, beta[2]), G1.mulScalar(g3, beta[3])))
-    U[3] = G1.affine(G1.mulScalar(g4, F.mul(beta[2], this.w.d)))
+    U[0] = g0.multiply(beta[0]).add(g1.multiply(beta[1])).normalize()
+    U[1] = this.w.c.add(g1.multiply(beta[0])).normalize()
+    U[2] = g2.multiply(beta[2]).add(g3.multiply(beta[3])).normalize()
+    U[3] = this.w.d.equals(curve.Fr.zero()) 
+      ? g4
+      : g4.multiply(beta[2].multiply(this.w.d)).normalize()
 
-    const allSecrets = [F.neg(this.w.d), this.y, blindSum].concat(beta, delta, blind)
-    const allScalars = allSecrets.map(curve.randomScalar)
+    const allSecrets = [this.w.d.negate(), this.y, blindSum].concat(beta, delta, blind)
+    const allScalars = allSecrets.map(curve.Fr.random)
 
     return {
       U,
@@ -56,19 +57,21 @@ module.exports = class ActiveIdentifier extends Identifier {
       const proofs = []
 
       allSecrets[1] = k
-      const blinds = allScalars.map((s, i) => F.add(s, F.mul(challenge, allSecrets[i])))
+      const blinds = allScalars.map((s, i) => s.add(challenge.multiply(allSecrets[i])))
+
+      const pairingU2 = curve.pairing(U[1], self.pk.a).div(self.pk.e.vg)
 
       const generatorsF12 = [
         self.pk.e.gg,
-        curve.pairing(g1, self.pk.a),
-        curve.pairing(g1, self.pk.g2),
-        F12.inv(curve.pairing(U[1], self.pk.g2))
+        self.pk.e.g1a,
+        self.pk.e.g1g2,
+        curve.pairing(U[1].negate(), self.pk.g2)
       ]
 
       proofs.push(genProof([g0, g1], [3, 4]))
       proofs.push(genProof([self.pk.u], [11]))
       proofs.push(genProof([self.pk.v], [12]))
-      proofs.push(genProof([G1.neg(U[0]), g0, g1], [1, 7, 8]))
+      proofs.push(genProof([U[0].negate(), g0, g1], [1, 7, 8]))
       proofs.push(genProof([g2, g3], [5, 6]))
       proofs.push(genProof([U[2], g2, g3], [0, 9, 10]))
       proofs.push(genProof([g4], [9]))
@@ -89,8 +92,10 @@ module.exports = class ActiveIdentifier extends Identifier {
   }
 
   update (info) {
-    const diff = F.sub(info.y, this.y)
-    this.w.c = G1.affine(G1.add(info.acc, G1.mulScalar(this.w.c, diff)))
-    this.w.d = F.mul(this.w.d, diff)
+    const diff = info.y.subtract(this.y)
+    if (!diff.equals(curve.Fr.zero())) {
+      this.w.c = info.acc.add(this.w.c.multiply(diff.value)).normalize()
+    }
+    this.w.d = this.w.d.multiply(diff)
   }
 }

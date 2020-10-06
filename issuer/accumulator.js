@@ -4,18 +4,18 @@ const { F, F12, G1, G2 } = curve
 
 module.exports = class Accumulator {
   constructor ({ g1, g2, product, alpha, init = true } = {}) {
-    this.alpha = alpha || curve.randomScalar()
+    this.alpha = alpha || curve.Fr.random()
 
-    this.g1 = g1 || curve.randomPointG1()
-    this.g2 = g2 || curve.randomPointG2()
+    this.g1 = g1 || curve.PointG1.random()
+    this.g2 = g2 || curve.PointG2.random()
     this.e = curve.pairing(this.g1, this.g2)
 
-    this.product = product || F.one
-    this.current = G1.mulScalar(this.g1, this.product)
+    this.product = product || curve.Fr.one()
+    this.current = this.g1.multiply(this.product)
 
     if (init) {
-      this.add(curve.randomScalar())
-      this.add(curve.randomScalar())
+      this.add(curve.Fr.random())
+      this.add(curve.Fr.random())
     }
   }
 
@@ -29,39 +29,39 @@ module.exports = class Accumulator {
   }
 
   genWitness (y_) {
-    const y_plusa = F.add(this.alpha, y_)
+    const y_plusa = this.alpha.add(y_)
 
     const witness = {}
 
-    witness.d = F.mod(this.product, y_plusa)
-    assert(!F.eq(witness.d, 0n), 'cannot generate non-membership witness for a member')
+    witness.d = curve.Fr.from(curve.math.mod(this.product, y_plusa))
+    assert(!witness.d.equals(curve.math.Fr.ZERO), 'cannot generate non-membership witness for a member')
 
     this.y_a = y_plusa
-    const exponent = F.div(F.sub(this.product, witness.d), y_plusa)
+    const exponent = this.product.subtract(witness.d).div(y_plusa)
 
-    witness.c = G1.mulScalar(this.g1, exponent)
+    witness.c = this.g1.multiply(exponent)
 
     return witness
   }
 
   add (y) {
-    const yplusa = F.add(this.alpha, y)
-    this.product = F.mul(this.product, yplusa)
-    this.current = G1.mulScalar(this.current, yplusa)
+    const yplusa = this.alpha.add(y)
+    this.product = this.product.multiply(yplusa)
+    this.current = this.current.multiply(yplusa)
 
     return y
   }
 
   verifyWitness (w, y) {
-    const g_yg_a = G2.mulScalar(this.g2, F.add(y, this.alpha))
+    const g_yg_a = this.g2.multiply(y.add(this.alpha))
 
     const pair1 = curve.pairing(w.c, g_yg_a)
-    const pair_d = F12.exp(this.e, w.d)
+    const pair_d = this.e.pow(w.d)
 
-    const lhs = F12.mul(pair1, pair_d)
+    const lhs = pair1.multiply(pair_d)
     const rhs = curve.pairing(this.current, this.g2)
 
-    return F12.eq(lhs, rhs)
+    return lhs.equals(rhs)
   }
 
   encode (buf, offset) {
@@ -69,17 +69,17 @@ module.exports = class Accumulator {
     if (!offset) offset = 0
     const startIndex = offset
 
-    curve.encodeScalar(this.alpha, buf, offset)
-    offset += curve.encodeScalar.bytes
+    this.alpha.encode(buf, offset)
+    offset += this.alpha.encode.bytes
 
-    curve.encodeG1(this.g1, buf, offset)
-    offset += curve.encodeG1.bytes
+    this.g1.encode(buf, offset)
+    offset += this.g1.encode.bytes
 
-    curve.encodeG2(this.g2, buf, offset)
-    offset += curve.encodeG1.bytes
+    this.g2.encode(buf, offset)
+    offset += this.g2.encode.bytes
 
-    curve.encodeScalar(this.product, buf, offset)
-    offset += curve.encodeScalar.bytes
+    this.product.encode(buf, offset)
+    offset += this.product.encode.bytes
 
     this.encode.bytes = offset - startIndex
     return buf
@@ -91,17 +91,17 @@ module.exports = class Accumulator {
 
     const opts = {}
 
-    opts.alpha = curve.decodeScalar(buf, offset)
-    offset += curve.decodeScalar.bytes
+    opts.alpha = curve.Fr.decode(buf, offset)
+    offset += curve.Fr.decode.bytes
 
-    opts.g1 = curve.decodeG1(buf, offset)
-    offset += curve.decodeG1.bytes
+    opts.g1 = curve.PointG1.decode(buf, offset)
+    offset += curve.PointG1.decode.bytes
 
-    opts.g2 = curve.decodeG2(buf, offset)
-    offset += curve.decodeG1.bytes
+    opts.g2 = curve.PointG2.decode(buf, offset)
+    offset += curve.PointG2.decode.bytes
 
-    opts.product = curve.decodeScalar(buf, offset)
-    offset += curve.decodeScalar.bytes
+    opts.product = curve.Fr.decode(buf, offset)
+    offset += curve.Fr.decode.bytes
 
     opts.init = false
 
@@ -110,6 +110,13 @@ module.exports = class Accumulator {
   }
 
   encodingLength () {
-    return 352
+    let len = 0
+
+    len += this.alpha.encodingLength()
+    len += this.g1.encodingLength()
+    len += this.g2.encodingLength()
+    len += this.product.encodingLength()
+    
+    return len
   }
 }

@@ -3,9 +3,9 @@ const curve = require('../lib/curve')
 const hash = require('../lib/challenge')
 const attributes = require('../lib/gen-attributes')
 const { verify } = require('../lib/schnorr-proof')
-const { IssuanceSetup, IssuanceResponse } = require('../LIB/wire')
+const { IssuanceSetup, IssuanceResponse } = require('../lib/wire')
 
-const rand = curve.randomScalar
+const rand = curve.Fr.random
 const G1 = curve.G1
 
 module.exports = IssuingProtocol
@@ -13,11 +13,11 @@ module.exports = IssuingProtocol
 function IssuingProtocol (keys, attr) {
   if (!(this instanceof IssuingProtocol)) return new IssuingProtocol(keys, attr)
 
-  const K_ = curve.randomPointG1()
-  const S_ = G1.mulScalar(K_, keys.sk.a)
-  const S0_ = G1.mulScalar(K_, keys.sk._a[0])
+  const K_ = curve.PointG1.random()
+  const S_ = K_.multiply(keys.sk.a)
+  const S0_ = K_.multiply(keys.sk._a[0])
 
-  const k0 = curve.randomScalar()
+  const k0 = curve.Fr.random()
   const k = [k0].concat(attr.map(a => a.toString()).map(attributes.encode))
 
   const setup = new IssuanceSetup(k, K_, S_, S0_)
@@ -35,27 +35,27 @@ function respond (keys, attr, S_) {
     const challenge = hash(res.S, res.S0)
 
     const proof = res.proof
-    assert(verify([res.S, res.S0], res.R, proof, proof.blinds, challenge),
+    assert(verify([res.S, res.S0], res.R, proof, challenge),
       'commitment to R fails validation.')
 
-    const inv_a = curve.F.inv(keys.sk.a)
-    const K = G1.mulScalar(res.S, inv_a)
+    const inv_a = keys.sk.a.invert()
+    const K = res.S.multiply(inv_a)
 
-    const inv_a0 = curve.F.inv(keys.sk._a[0])
-    const S0_inv_a0 = G1.mulScalar(res.S0, inv_a0)
+    const inv_a0 = keys.sk._a[0].invert()
+    const S0_inv_a0 = res.S0.multiply(inv_a0)
 
-    assert(!G1.eq(res.S, S_), 'S and S_ should be distinct.')
-    assert(G1.eq(K, S0_inv_a0), 'K and S0_inv_a0 should be equal.')
+    assert(!res.S.equals(S_), 'S and S_ should be distinct.')
+    assert(K.equals(S0_inv_a0), 'K and S0_inv_a0 should be equal.')
 
     const kappa = rand()
 
-    const _S = attr.map((_, i) => G1.mulScalar(K, keys.sk._a[i + 1]))
+    const _S = attr.map((_, i) => K.multiply(keys.sk._a[i + 1]))
 
-    const SKappa2 = G1.mulScalar(res.S, kappa)
-    const C = _S.reduce((acc, el, i) => G1.add(acc, G1.mulScalar(el, attr[i])),
-      G1.add(res.R, G1.add(K, SKappa2)))
+    const SKappa2 = res.S.multiply(kappa)
+    const C = _S.reduce((acc, el, i) => acc.add(el.multiply(attr[i])),
+      res.R.add(K).add(SKappa2))
 
-    const T = G1.mulScalar(C, keys.sk.z)
+    const T = C.multiply(keys.sk.z)
 
     return new IssuanceResponse(kappa, K, _S, T)
   }

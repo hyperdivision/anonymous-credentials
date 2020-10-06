@@ -5,7 +5,7 @@ const { ObtainInfo, Showing } = require('../lib/wire')
 
 const G1 = curve.G1
 const F = curve.F
-const rand = curve.randomScalar
+const rand = curve.Fr.random
 
 module.exports = class Credential {
   constructor (length) {
@@ -24,18 +24,18 @@ module.exports = class Credential {
 
     init.k.forEach((val, i) => { this.k[i] = val })
 
-    this.S = G1.mulScalar(init.S_, alpha)
-    this._S[0] = G1.mulScalar(init.S0_, alpha)
+    this.S = init.S_.multiply(alpha)
+    this._S[0] = init.S0_.multiply(alpha)
 
-    const R1 = G1.mulScalar(this.S, this.kappa)
-    const R2 = G1.mulScalar(this._S[0], this.k[0])
-    const R = G1.add(R1, R2)
+    const R1 = this.S.multiply(this.kappa)
+    const R2 = this._S[0].multiply(this.k[0])
+    const R = R1.add(R2)
 
     const generators = [this.S, this._S[0]]
     const secrets = [this.kappa, this.k[0]]
     const challenge = hash(...generators)
 
-    const proof = schnorr.prove(generators, secrets, challenge)
+    const proof = schnorr.prove(generators, secrets, challenge, R)
 
     return new ObtainInfo(this.S, this._S[0], R, proof)
   }
@@ -43,7 +43,7 @@ module.exports = class Credential {
   finalize (final) {
     const k = this.k
 
-    this.kappa = F.normalize(F.add(this.kappa, final.kappa))
+    this.kappa = this.kappa.add(final.kappa)
     this.K = final.K
 
     final._S.forEach((val, i) => { this._S[i + 1] = val })
@@ -66,15 +66,15 @@ module.exports = class Credential {
     const beta = rand()
 
     // blinded by alpha
-    const K_ = G1.mulScalar(this.K, alpha)
-    const S_ = G1.mulScalar(this.S, alpha)
-    const _S = this._S.map(el => G1.mulScalar(el, alpha))
+    const K_ = this.K.multiply(alpha)
+    const S_ = this.S.multiply(alpha)
+    const _S = this._S.map(el => el.multiply(alpha))
 
-    const blindingFactor = F.neg(F.mul(alpha, F.inv(beta)))
+    const blindingFactor = alpha.multiply(beta.invert()).negate()
 
     // blinded by div(alpha, beta)
-    const C_ = G1.mulScalar(this.C, blindingFactor)
-    const T_ = G1.mulScalar(this.T, blindingFactor)
+    const C_ = this.C.multiply(blindingFactor)
+    const T_ = this.T.multiply(blindingFactor)
 
     const undisclosed = {}
     undisclosed.S = _S.filter((_, i) => !disclosed.includes(i))
@@ -191,9 +191,9 @@ module.exports = class Credential {
 }
 
 function mulAdd (sum, element, scalar) {
-  return G1.add(sum, G1.mulScalar(element, scalar))
+  return sum.add(element.multiply(scalar))
 }
 
 function findIndexIn (arr) {
-  return attr => arr.findIndex(a => curve.F.eq(a, attr))
+  return attr => arr.findIndex(a => a.equals(attr))
 }

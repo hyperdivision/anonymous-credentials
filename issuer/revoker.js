@@ -15,8 +15,8 @@ module.exports = class Revoker {
 
     this.secrets = {}
     this.secrets.alpha = this.acc.alpha
-    this.secrets.xi1 = opts.secrets.xi1 || curve.randomScalar()
-    this.secrets.xi2 = opts.secrets.xi2 || curve.randomScalar()
+    this.secrets.xi1 = opts.secrets.xi1 || curve.Fr.random()
+    this.secrets.xi2 = opts.secrets.xi2 || curve.Fr.random()
 
     this.pubkey = opts.pubkey || new AccumulatorPublicKey({
       g1: this.acc.g1,
@@ -56,10 +56,10 @@ module.exports = class Revoker {
 
     const { C, C1, C2 } = witness
 
-    const C1xi1 = G1.mulScalar(C1, this.secrets.xi1)
-    const C2xi2 = G1.mulScalar(C2, this.secrets.xi2)
+    const C1xi1 = C1.multiply(this.secrets.xi1)
+    const C2xi2 = C2.multiply(this.secrets.xi2)
 
-    return G1.sub(C, G1.add(C1xi1, C2xi2))
+    return C.subtract(C1xi1.add(C2xi2))
   }
 
   revoke (y) {
@@ -93,14 +93,11 @@ module.exports = class Revoker {
     encodeUserArray(this.revoked, buf, offset)
     offset += encodeUserArray.bytes
 
-    curve.encodeG1(this.pubkey.u, buf, offset)
-    offset += curve.encodeG1.bytes
+    this.secrets.xi1.encode(buf, offset)
+    offset += this.secrets.xi1.encode.bytes
 
-    curve.encodeScalar(this.secrets.xi1, buf, offset)
-    offset += curve.encodeScalar.bytes
-
-    curve.encodeScalar(this.secrets.xi2, buf, offset)
-    offset += curve.encodeScalar.bytes
+    this.secrets.xi2.encode(buf, offset)
+    offset += this.secrets.xi2.encode.bytes
 
     this.pubkey.encode(buf, offset)
     offset += this.pubkey.encode.bytes
@@ -125,14 +122,11 @@ module.exports = class Revoker {
     opts.revoked = decodeUserArray(buf, offset)
     offset += decodeUserArray.bytes
 
-    opts.u = curve.decodeG1(buf, offset)
-    offset += curve.decodeG1.bytes
+    opts.secrets.xi1 = curve.Fr.decode(buf, offset)
+    offset += curve.Fr.decode.bytes
 
-    opts.secrets.xi1 = curve.decodeScalar(buf, offset)
-    offset += curve.decodeScalar.bytes
-
-    opts.secrets.xi2 = curve.decodeScalar(buf, offset)
-    offset += curve.decodeScalar.bytes
+    opts.secrets.xi2 = curve.Fr.decode(buf, offset)
+    offset += curve.Fr.decode.bytes
 
     opts.pubkey = AccumulatorPublicKey.decode(buf, offset)
     offset += AccumulatorPublicKey.decode.bytes
@@ -150,7 +144,8 @@ module.exports = class Revoker {
     for (const user of this.users) len += user.encodingLength()
     for (const user of this.revoked) len += user.encodingLength()
     len += this.pubkey.encodingLength()
-    len += 160
+    len += this.secrets.xi1.encodingLength()
+    len += this.secrets.xi2.encodingLength()
 
     return len
   }

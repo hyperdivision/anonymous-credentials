@@ -57,7 +57,7 @@ class PrivateCertification {
 
   addCredential (cred) {
     const g0 = this.revoker.pubkey.basepoints[0]
-    cred.revocationPoint = curve.G1.mulScalar(g0, cred.identifier.y)
+    cred.revocationPoint = g0.multiply(cred.identifier.y)
     this.credentials.push(new RegisteredCredential(cred))
   }
 
@@ -83,7 +83,7 @@ class PrivateCertification {
     // }
 
     const revokeUser = this.credentials.find(c =>
-      curve.G1.eq(c.revocationPoint, toRevoke))
+      toRevoke.equals(c.revocationPoint))
 
     const revinfo = this.revoker.revoke(revokeUser.identifier.y)
     revinfo.certId = this.certId
@@ -196,8 +196,8 @@ class RegisteredCredential {
     this.identifier.encode(buf, offset)
     offset += this.identifier.encode.bytes
 
-    curve.encodeG1(this.revocationPoint, buf, offset)
-    offset += curve.encodeG1.bytes
+    this.revocationPoint.encode(buf, offset)
+    offset += this.revocationPoint.encode.bytes
 
     this.encode.bytes = offset - startIndex
     return buf
@@ -207,7 +207,7 @@ class RegisteredCredential {
     let len = 4
     len += Buffer.from(JSON.stringify(this.attr)).byteLength
     len += this.identifier.encodingLength()
-    len += curve.encodingLengthG1()
+    len += curve.PointG1.encodingLength()
 
     return len
   }
@@ -227,8 +227,8 @@ class RegisteredCredential {
     opts.identifier = Identifier.decode(buf, offset)
     offset += Identifier.decode.bytes
 
-    opts.revocationPoint = curve.decodeG1(buf, offset)
-    offset += curve.decodeG1.bytes
+    opts.revocationPoint = curve.PointG1.decode(buf, offset)
+    offset += curve.PointG1.decode.bytes
 
     RegisteredCredential.decode.bytes = offset - startIndex
     return new RegisteredCredential(opts)
@@ -255,19 +255,19 @@ class CertificateKeys {
     this.sk = {}
     this.pk = {}
 
-    this.sk.a = rand()
-    this.sk.z = rand()
+    this.sk.a = curve.Fr.random()
+    this.sk.z = curve.Fr.random()
 
     this.sk._a = []
-    for (let i = 0; i < n; i++) this.sk._a[i] = rand()
+    for (let i = 0; i < n; i++) this.sk._a[i] = curve.Fr.random()
 
     this.pk = new keys.CredentialPublicKey()
 
     // Q is just a random generator, so don't store discrete log
-    this.pk.Q = curve.mulGenG2(rand())
-    this.pk.A = curve.G2.mulScalar(this.pk.Q, this.sk.a)
-    this.pk.Z = curve.G2.mulScalar(this.pk.Q, this.sk.z)
-    this.pk._A = this.sk._a.map(k => curve.G2.mulScalar(this.pk.Q, k))
+    this.pk.Q = curve.PointG2.mulGen(curve.Fr.random())
+    this.pk.A = this.pk.Q.multiply(this.sk.a)
+    this.pk.Z = this.pk.Q.multiply(this.sk.z)
+    this.pk._A = this.sk._a.map(k => this.pk.Q.multiply(k))
   }
 
   encode (buf, offset) {
@@ -275,22 +275,22 @@ class CertificateKeys {
     if (!offset) offset = 0
     const startIndex = offset
 
-    curve.encodeScalar(this.sk.a, buf, offset)
-    offset += curve.encodeScalar.bytes
+    this.sk.a.encode(buf, offset)
+    offset += this.sk.a.encode.bytes
 
     buf.writeUInt32LE(this.sk._a.length, offset)
     offset += 4
 
     for (const k of this.sk._a) {
-      curve.encodeScalar(k, buf, offset)
-      offset += curve.encodeScalar.bytes
+      k.encode(buf, offset)
+      offset += k.encode.bytes
     }
 
-    curve.encodeScalar(this.sk.z, buf, offset)
-    offset += curve.encodeScalar.bytes
+    this.sk.z.encode(buf, offset)
+    offset += this.sk.z.encode.bytes
 
-    curve.encodeG2(this.pk.Q, buf, offset)
-    offset += curve.encodeG2.bytes
+    this.pk.Q.encode(buf, offset)
+    offset += this.pk.Q.encode.bytes
 
     this.encode.bytes = offset - startIndex
     return buf
@@ -302,27 +302,27 @@ class CertificateKeys {
 
     const keys = new CertificateKeys()
 
-    keys.sk.a = curve.decodeScalar(buf, offset)
-    offset += curve.decodeScalar.bytes
+    keys.sk.a = curve.Fr.decode(buf, offset)
+    offset += curve.Fr.decode.bytes
 
     const aLen = buf.readUInt32LE(offset)
     offset += 4
 
     keys.sk._a = new Array(aLen)
     for (let i = 0; i < aLen; i++) {
-      keys.sk._a[i] = curve.decodeScalar(buf, offset)
-      offset += curve.decodeScalar.bytes
+      keys.sk._a[i] = curve.Fr.decode(buf, offset)
+      offset += curve.Fr.decode.bytes
     }
 
-    keys.sk.z = curve.decodeScalar(buf, offset)
-    offset += curve.decodeScalar.bytes
+    keys.sk.z = curve.Fr.decode(buf, offset)
+    offset += curve.Fr.decode.bytes
 
-    keys.pk.Q = curve.decodeG2(buf, offset)
-    offset += curve.encodeG2.bytes
+    keys.pk.Q = curve.PointG2.decode(buf, offset)
+    offset += curve.PointG2.decode.bytes
 
-    keys.pk.A = curve.G2.mulScalar(keys.pk.Q, keys.sk.a)
-    keys.pk.Z = curve.G2.mulScalar(keys.pk.Q, keys.sk.z)
-    keys.pk._A = keys.sk._a.map(k => curve.G2.mulScalar(keys.pk.Q, k))
+    keys.pk.A = keys.pk.Q.multiply(keys.sk.a)
+    keys.pk.Z = keys.pk.Q.multiply(keys.sk.z)
+    keys.pk._A = keys.sk._a.map(k => keys.pk.Q.multiply(k))
 
     CertificateKeys.decode.bytes = offset - startIndex
     return keys

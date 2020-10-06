@@ -2,7 +2,7 @@ const Identity = require('./identity')
 const crypto = require('crypto')
 const { Application, SetupMessage, ObtainMessage, StoreMessage, RevocationInfo } = require('../lib/wire')
 
-module.exports = class User {
+module.exports = class Prover {
   constructor () {
     this.applications = []
     this.identities = []
