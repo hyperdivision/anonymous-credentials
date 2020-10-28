@@ -22,9 +22,9 @@ const application = {
   employed: true
 }
 
-const org = new Issuer('./storage/org')
+let org = new Issuer('./storage/org')
 const users = []
-const verifier = new Verifier('./storage/verifier')
+let verifier = new Verifier('./storage/verifier')
 
 // register the certification
 org.addCertification(schema, function (certId) {
@@ -33,29 +33,33 @@ org.addCertification(schema, function (certId) {
     newUsers(3, () => {
       // user selects which attributes to show
       let index = Math.floor(Math.random() * users.length)
-      const user = users[index]
+      let user = users[index]
 
+      // test user encoding
+      user = User.decode(user.encode())
+
+      // 512ms
       const present = user.present(['age', 'drivers licence', 'gender'])
-      // console.log(util.inspect(present, false, null, true /* enable colors */))
-      const newVerifier = Verifier.decode(verifier.encode())
 
-      newVerifier.validate(present, function (err, identifier) {
+      // test verifier encoding
+      verifier = Verifier.decode(verifier.encode())
+
+      // 1130ms
+      verifier.validate(present, function (err, identifier) {
         if (err) throw err
         console.log('credential has been accepted.')
 
-        const newOrg = Issuer.decode(org.encode())
+        // test issuer encoding
+        org = Issuer.decode(org.encode())
 
-        // 1400ms
-        // console.log(util.inspect(org.certifications[0].keys.pk, false, null, true /* enable colors */))
-        // console.log(util.inspect(newOrg.certifications[0].keys.pk, false, null, true /* enable colors */))
-        // throw new Error
-        newOrg.revokeCredential(identifier, function (err, revinfo) {
-          newVerifier.updateCertifications(revinfo)
+        // 390ms
+        org.revokeCredential(identifier, function (err, revinfo) {
+          verifier.updateCertifications(revinfo)
 
           users.forEach(u => u.updateNonRevocationWitnesses(revinfo))
           const presentRevoked = user.present(['age', 'drivers licence'])
 
-          const failure = newVerifier.validate(presentRevoked, function (err) {
+          verifier.validate(presentRevoked, function (err) {
             if (err) console.error(err)
 
             while (true) {
@@ -68,7 +72,7 @@ org.addCertification(schema, function (certId) {
 
             const newUser = users[index]
 
-            newVerifier.validate(newUser.present(['age', 'nationality', 'drivers licence', 'employed']), (err) => {
+            verifier.validate(newUser.present(['age', 'nationality', 'drivers licence', 'employed']), (err) => {
               if (err) console.log(err)
               else console.log('success')
             })
@@ -83,16 +87,19 @@ org.addCertification(schema, function (certId) {
       const user = new User()
       users.push(user)
 
-      // ~0.06ms
+      // ~0.3ms
       const app = user.apply(application, certId)
-      // ~7ms
+
+      // ~24ms
       const setup = org.addIssuance(app)
-      // ~15ms
+
+      // ~67ms
       const obtain = user.obtain(setup)
-      // ~31ms
+
+      // ~188ms
       const granted = org.grantCredential(obtain)
 
-      // ~1050ms
+      // ~216ms
       user.store(granted)
 
       newUsers(--i, cb)

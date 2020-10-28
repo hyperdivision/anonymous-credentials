@@ -63,8 +63,8 @@ module.exports = class Identity {
     this.credential.encode(buf, offset)
     offset += this.credential.encode.bytes
 
-    this.pseudonym.encode(buf, offset)
-    offset += this.pseudonym.encode.bytes
+    this.identifier.encode(buf, offset)
+    offset += this.identifier.encode.bytes
 
     this.encode.bytes = offset - startIndex
     return buf
@@ -77,7 +77,7 @@ module.exports = class Identity {
     len += json.length
     len += 32
     len += this.credential.encodingLength()
-    len += this.pseudonym.encodingLength()
+    len += this.identifier.encodingLength()
 
     return len
   }
@@ -95,15 +95,15 @@ module.exports = class Identity {
     const certId = buf.subarray(offset, offset + 32).toString('hex')
     offset += 32
 
-    const id = new Identity(attrs, certId)
+    const id = new this(attrs, certId)
 
     id.credential = Credential.decode(buf, offset)
     offset += Credential.decode.bytes
 
-    id.pseudonym = Identifier.decode(buf, offset)
+    id.identifier = Identifier.decode(buf, offset)
     offset += Identifier.decode.bytes
 
-    Identity.decode.bytes = offset - startIndex
+    this.decode.bytes = offset - startIndex
     return id
   }
 }

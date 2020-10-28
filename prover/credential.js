@@ -108,30 +108,25 @@ module.exports = class Credential {
     if (!offset) offset = 0
     const startIndex = offset
 
-    buf.writeUInt32LE(this.k.length, offset)
-    offset += 4
+    curve.encodeScalars(this.k, buf, offset)
+    offset += curve.encodeScalars.bytes
 
-    for (const k of this.k) {
-      curve.encodeScalar(k, buf, offset)
-      offset += curve.encodeScalar.bytes
-    }
+    this.kappa.encode(buf, offset)
+    offset += this.kappa.encode.bytes
 
-    curve.encodeScalar(this.kappa, buf, offset)
-    offset += curve.encodeScalar.bytes
+    this.K.encode(buf, offset)
+    offset += this.K.encode.bytes
 
-    curve.encodeG1(this.K, buf, offset)
-    offset += curve.encodeG1.bytes
-
-    curve.encodeG1(this.S, buf, offset)
-    offset += curve.encodeG1.bytes
+    this.S.encode(buf, offset)
+    offset += this.S.encode.bytes
 
     for (const S of this._S) {
-      curve.encodeG1(S, buf, offset)
-      offset += curve.encodeG1.bytes
+      S.encode(buf, offset)
+      offset += S.encode.bytes
     }
 
-    curve.encodeG1(this.T, buf, offset)
-    offset += curve.encodeG1.bytes
+    this.T.encode(buf, offset)
+    offset += this.T.encode.bytes
 
     this.encode.bytes = offset - startIndex
     return buf
@@ -142,7 +137,7 @@ module.exports = class Credential {
 
     len += 8
     len += 32 * (this.k.length + 1)
-    len += 96 * (this._S.length + 3)
+    len += this._S[0].encodingLength() * (this._S.length + 3)
 
     return len
   }
@@ -151,37 +146,33 @@ module.exports = class Credential {
     if (!offset) offset = 0
     const startIndex = offset
 
-    const kLen = buf.readUInt32LE(offset)
-    offset += 4
+    const k = curve.decodeScalars(buf, offset)
+    offset += curve.decodeScalars.bytes
 
     // here k[0] is encoded rather than generated, so give (kLen - 1)
-    const cred = new Credential(kLen - 1)
+    const cred = new this(k.length - 1)
+    cred.k = k
 
-    for (let i = 0; i < kLen; i++) {
-      cred.k[i] = curve.decodeScalar(buf, offset)
-      offset += curve.decodeScalar.bytes
+    cred.kappa = curve.Fr.decode(buf, offset)
+    offset += curve.Fr.decode.bytes
+
+    cred.K = curve.PointG1.decode(buf, offset)
+    offset += curve.PointG1.decode.bytes
+
+    cred.S = curve.PointG1.decode(buf, offset)
+    offset += curve.PointG1.decode.bytes
+
+    for (let i = 0; i < k.length; i++) {
+      cred._S[i] = curve.PointG1.decode(buf, offset)
+      offset += curve.PointG1.decode.bytes
     }
 
-    cred.kappa = curve.decodeScalar(buf, offset)
-    offset += curve.decodeScalar.bytes
-
-    cred.K = curve.decodeG1(buf, offset)
-    offset += curve.decodeG1.bytes
-
-    cred.S = curve.decodeG1(buf, offset)
-    offset += curve.decodeG1.bytes
-
-    for (let i = 0; i < kLen; i++) {
-      cred._S[i] = curve.decodeG1(buf, offset)
-      offset += curve.decodeG1.bytes
-    }
-
-    cred.T = curve.decodeG1(buf, offset)
-    offset += curve.decodeG1.bytes
+    cred.T = curve.PointG1.decode(buf, offset)
+    offset += curve.PointG1.decode.bytes
 
     cred.C = cred._S.reduce(accumulator, mulAdd(cred.K, cred.S, cred.kappa))
 
-    Credential.decode.bytes = offset - startIndex
+    this.decode.bytes = offset - startIndex
     return cred
 
     function accumulator (a, e, i) {

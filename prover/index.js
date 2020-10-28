@@ -91,7 +91,7 @@ module.exports = class Prover {
     if (!offset) offset = 0
     const startIndex = offset
 
-    const user = new User()
+    const user = new this()
 
     const ids = buf.readUInt32LE(offset)
     offset += 4
@@ -101,7 +101,7 @@ module.exports = class Prover {
       offset += Identity.decode.bytes
     }
 
-    User.decode.bytes = offset - startIndex
+    this.decode.bytes = offset - startIndex
     return user
   }
 }
