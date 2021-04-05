@@ -10,7 +10,7 @@ module.exports = class RevocationList extends EventEmitter {
     super()
 
     this.certId = typeof certId === 'string' ? Buffer.from(certId, 'hex') : certId
-    this.storage =  storage
+    this.storage = storage
 
     this.key = opts ? opts.key : null
     this.feed = null
@@ -77,11 +77,9 @@ module.exports = class RevocationList extends EventEmitter {
       self.swarm = swarm
     })
 
-    feed.on('download', function (i, root) {
+    feed.on('download', function (i, id) {
       // TODO: remove hardcoded depth
-      for (let key of keys.keysFromRoot(root, 256)) {
-        self.revokedKeys.push(key.pk)
-      }
+      // self.emit('revocation', id)
     })
   }
 
@@ -92,7 +90,7 @@ module.exports = class RevocationList extends EventEmitter {
     buf.writeUInt32LE(this.revokedKeys.length, offset)
     offset += 4
 
-    for (let key of revokedKeys) {
+    for (const key of revokedKeys) {
       buf.set(key, offset)
       offset += 32
     }
@@ -107,7 +105,7 @@ module.exports = class RevocationList extends EventEmitter {
 
   // TODO: specify time since last sync / live sync then check
   has (key, opts, cb) {
-    for (let revoked of this.revokedKeys) {
+    for (const revoked of this.revokedKeys) {
       if (Buffer.compare(key, revoked) === 0) return true
     }
 
